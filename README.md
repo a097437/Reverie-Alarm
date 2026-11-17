@@ -28,4 +28,3 @@
 📥 下載與使用
 
 Android APK 安裝：前往 [Releases 頁面](https://github.com/a097437/Reverie-Alarm/releases) 下載最新版本的 `.apk` 安裝檔。
-免安裝網頁版：直接用手機或電腦瀏覽器開啟 [Reverie Alarm 網頁版](https://a097437.github.io/Reverie-Alarm/)（支援「加到主畫面」）。
