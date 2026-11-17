@@ -4,14 +4,7 @@
   <h1>Reverie Alarm</h1>
 
   <p>
-    <a href="https://a097437.github.io/Reverie-Alarm/">
-      <img src="https://img.shields.io/badge/線上網頁版-立即開啟-1e293b?style=flat-square" alt="Web App" />
-    </a>
-    <a href="https://github.com/a097437/Reverie-Alarm/releases">
-      <img src="https://img.shields.io/github/v/release/a097437/Reverie-Alarm?label=release&color=2563eb&style=flat-square" alt="Release" />
-    </a>
-    <img src="https://img.shields.io/badge/Platform-Android%20%7C%20PWA-3ddc84?style=flat-square" alt="Platform" />
-    <img src="https://img.shields.io/badge/Offline-離線可用-f59e0b?style=flat-square" alt="Offline" />
+c="https://img.shields.io/badge/Offline-離線可用-f59e0b?style=flat-square" alt="Offline" />
   </p>
 
   <p><strong>專為輪班與通勤族群設計的排班日曆與兩段式強效鬧鐘應用</strong></p>
