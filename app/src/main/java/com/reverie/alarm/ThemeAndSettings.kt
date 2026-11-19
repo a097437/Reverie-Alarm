@@ -1,5 +1,6 @@
 package com.reverie.alarm
 
+import androidx.compose.material3.Icon
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -63,7 +64,7 @@ const val APP_VERSION = "v1.0.0"
 object UiScale {
     var fontScale by mutableFloatStateOf(1f)
 }
-const val APP_BUILD_DATE = "2026.11.18"
+const val APP_BUILD_DATE = "2026.11.19"
 
 data class ThemePalette(
     val title: String,
@@ -328,7 +329,7 @@ fun SegmentedPicker(
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
+                IconText(
                     label,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -374,7 +375,7 @@ fun SectionCard(title: String, palette: ThemePalette, trailing: String? = null, 
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(title, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText)
+                IconText(title, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText, modifier = Modifier.weight(1f, fill = false))
                 if (trailing != null) Text(trailing, fontSize = 10.sp, color = palette.textMuted)
             }
             content()
@@ -481,7 +482,7 @@ private fun PanelHeader(title: String, subtitle: String, actionLabel: String, pa
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain)
+            IconText(title, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain)
             Text(subtitle, fontSize = 11.sp, color = palette.textMuted)
         }
         Box(
@@ -666,7 +667,7 @@ fun SettingsSheet(
                             .clickable { onExportBackup() }
                             .padding(vertical = 11.dp),
                         contentAlignment = Alignment.Center
-                    ) { Text("⬇️ 匯出備份檔 (.json)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                    ) { IconText("⬇️ 匯出備份檔 (.json)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White) }
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -676,7 +677,7 @@ fun SettingsSheet(
                             .clickable { onImportBackup() }
                             .padding(vertical = 11.dp),
                         contentAlignment = Alignment.Center
-                    ) { Text("⬆️ 還原備份檔", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMain) }
+                    ) { IconText("⬆️ 還原備份檔", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMain) }
                 }
                 Box(
                     modifier = Modifier
@@ -686,7 +687,7 @@ fun SettingsSheet(
                         .clickable { confirmReset = true }
                         .padding(vertical = 9.dp),
                     contentAlignment = Alignment.Center
-                ) { Text("🔄 重置為初始示範資料", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF43F5E)) }
+                ) { IconText("🔄 重置為初始示範資料", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF43F5E)) }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -747,7 +748,7 @@ private fun SwatchGrid(
                                 .border(1.dp, palette.borderColor, CircleShape)
                                 .clickable { onCustom() },
                             contentAlignment = Alignment.Center
-                        ) { Text("+", fontWeight = FontWeight.Black, color = palette.textMain) }
+                        ) { Icon(Tabler.Plus, contentDescription = "自訂色碼", tint = palette.textMain, modifier = Modifier.size(16.dp)) }
                     } else {
                         SwatchDot(sw.hex, sw.hex.equals(selectedHex, ignoreCase = true), ringColor) { onPick(sw.hex) }
                     }
@@ -874,7 +875,7 @@ fun AboutAppSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("📋 更新日誌", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain)
+                        IconText("📋 更新日誌", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain)
                         Text("點擊查看 Reverie Alarm 各版本功能更新內容", fontSize = 10.sp, color = palette.textMuted)
                     }
                     Text("查看 ›", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.accentText)
@@ -888,7 +889,7 @@ fun AboutAppSheet(
                         .clickable { onExportLogs() }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
-                ) { Text("⬇️ 匯出日誌（.txt）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText) }
+                ) { IconText("⬇️ 匯出日誌（.txt）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText) }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -900,7 +901,7 @@ fun AboutAppSheet(
                         }
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
-                ) { Text("🔄 立即檢查更新（目前 $APP_VERSION 穩定版）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White) }
+                ) { IconText("🔄 立即檢查更新（目前 $APP_VERSION 穩定版）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White) }
             }
         }
     }
@@ -923,7 +924,7 @@ fun HolidaySafeguardDialog(
     MotionAlertDialog(
         onDismissRequest = onKeep,
         containerColor = palette.bgCard,
-        icon = { Text("⚠️", fontSize = 28.sp) },
+        icon = { Icon(Tabler.AlertTriangle, contentDescription = null, tint = amber.readableOn(palette.bgCard, 3.0), modifier = Modifier.size(30.dp)) },
         title = { Text("休假日鬧鐘防呆提醒", fontWeight = FontWeight.ExtraBold, color = palette.textMain) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

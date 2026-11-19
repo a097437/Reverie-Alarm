@@ -447,7 +447,13 @@ fun TopToastHost(palette: ThemePalette) {
                     .clickable(interactionSource = noRipple, indication = null) { visible = false }
                     .padding(horizontal = 16.dp, vertical = 11.dp)
             ) {
-                Text(shown, color = palette.textMain, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                val label = parseIconLabel(shown)
+                IconText(
+                    shown, color = palette.textMain, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    iconTint = leadMarkTint(label.leadMark, palette.accentText).let { c ->
+                        if (label.leadMark == null) palette.textMain else c.readableOn(palette.bgElevated, 3.0)
+                    }
+                )
             }
         }
     }

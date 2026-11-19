@@ -13,12 +13,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -139,7 +133,7 @@ fun ExtraCalendarViews(
                                 }
                             }
                             if (dayAlarms.isNotEmpty()) {
-                                Text("⏰ ${dayAlarms.size}個", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
+                                IconText("⏰ ${dayAlarms.size}個", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -185,7 +179,7 @@ fun ExtraCalendarViews(
                             Text(ev!!.title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ev.type.chipText())
                         }
                         if (hourAlarms.isNotEmpty()) {
-                            Text("⏰ ${hourAlarms.first().triggerTime.format(timeFormatter)} ${hourAlarms.first().label}", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
+                            IconText("⏰ ${hourAlarms.first().triggerTime.format(timeFormatter)} ${hourAlarms.first().label}", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -306,7 +300,7 @@ fun GlobalSearchDialog(
                     placeholder = { Text("輸入班別名稱、日期 (如 11-18)、備註關鍵字...", fontSize = 12.sp) },
                     singleLine = true,
                     trailingIcon = if (query.isNotEmpty()) {
-                        { Text("✕", color = theme.textMuted, modifier = Modifier.clickable { query = "" }.padding(8.dp)) }
+                        { Icon(Tabler.X, contentDescription = "清除", tint = theme.textMuted, modifier = Modifier.clip(CircleShape).clickable { query = "" }.padding(8.dp).size(16.dp)) }
                     } else null,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -320,7 +314,7 @@ fun GlobalSearchDialog(
                                 .clickable { filter = id }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else theme.textMain)
+                            IconText(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else theme.textMain)
                         }
                     }
                 }
@@ -356,7 +350,7 @@ fun GlobalSearchDialog(
                                     modifier = Modifier.clickable { onEditDate(ev.date); onDismiss() }.padding(6.dp)
                                 )
                             }
-                            Text("跳轉 →", fontSize = 11.sp, color = theme.textMain)
+                            IconText("跳轉 →", fontSize = 11.sp, color = theme.textMain)
                         }
                     }
                     items(matchedAlarms) { al ->
@@ -372,8 +366,10 @@ fun GlobalSearchDialog(
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Icon(Tabler.Alarm, contentDescription = null, tint = if (al.enabled) theme.accentText else theme.textMuted, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
                             Text(
-                                highlight("⏰ ${al.date} ${al.triggerTime.toString().take(5)} · ${al.label}"),
+                                highlight("${al.date} ${al.triggerTime.toString().take(5)} · ${al.label}"),
                                 fontSize = 11.sp, color = if (al.enabled) theme.textMain else theme.textMuted,
                                 modifier = Modifier.weight(1f)
                             )

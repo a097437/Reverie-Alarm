@@ -18,23 +18,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.CalendarViewWeek
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.DateRange
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.VolunteerActivism
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -119,10 +102,10 @@ fun ReverieDrawerContent(
         ?: accentHex.uppercase()
 
     val viewItems = listOf(
-        DrawerViewItem(CalendarViewMode.YEAR, "年視圖", "全年 12 月總覽", Icons.Outlined.DateRange),
-        DrawerViewItem(CalendarViewMode.MONTH, "月視圖", "大格子月曆網格", Icons.Outlined.CalendarMonth),
-        DrawerViewItem(CalendarViewMode.WEEK, "週視圖", "7 日詳情展開", Icons.Outlined.CalendarViewWeek),
-        DrawerViewItem(CalendarViewMode.DAY, "日視圖", "24H 跨夜時間軸", Icons.Outlined.Schedule)
+        DrawerViewItem(CalendarViewMode.YEAR, "年視圖", "全年 12 月總覽", Tabler.Calendar),
+        DrawerViewItem(CalendarViewMode.MONTH, "月視圖", "大格子月曆網格", Tabler.CalendarMonth),
+        DrawerViewItem(CalendarViewMode.WEEK, "週視圖", "7 日詳情展開", Tabler.CalendarWeek),
+        DrawerViewItem(CalendarViewMode.DAY, "日視圖", "24H 跨夜時間軸", Tabler.Clock)
     )
 
     ModalDrawerSheet(
@@ -170,7 +153,7 @@ fun ReverieDrawerContent(
                             .border(1.dp, palette.borderColor, RoundedCornerShape(14.dp))
                             .clickable { onCloseDrawer() },
                         contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Outlined.Close, contentDescription = "關閉側邊選單", tint = palette.textMain, modifier = Modifier.size(18.dp)) }
+                    ) { Icon(Tabler.X, contentDescription = "關閉側邊選單", tint = palette.textMain, modifier = Modifier.size(18.dp)) }
                 }
 
                 // ---- 搜尋入口 ----
@@ -187,7 +170,7 @@ fun ReverieDrawerContent(
                         .padding(horizontal = 10.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconTile(Icons.Outlined.Search, Color(0xFF38BDF8), Color(0xFF38BDF8), size = 34, iconSize = 18)
+                    IconTile(Tabler.Search, Color(0xFF38BDF8), Color(0xFF38BDF8), size = 34, iconSize = 18)
                     Spacer(Modifier.width(10.dp))
                     Text(
                         "搜尋班別、日期、備註或鬧鐘...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f),
@@ -239,7 +222,7 @@ fun ReverieDrawerContent(
                                 fontSize = 11.sp, color = palette.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                         }
-                        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
+                        Icon(Tabler.ChevronRight, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
                     }
 
                     Text("檢視日曆來源", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
@@ -256,26 +239,26 @@ fun ReverieDrawerContent(
                                 .padding(horizontal = 12.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
+                            IconText(
                                 if (viewingSub == null) "📅 我的日曆（完整權限）" else "👀 ${viewingSub.name}",
                                 fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
                             )
-                            Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
+                            Icon(Tabler.ChevronDown, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
                         }
                         DropdownMenu(expanded = sourceOpen, onDismissRequest = { sourceOpen = false }, containerColor = palette.bgCard) {
                             DropdownMenuItem(
-                                text = { Text("📅 我的日曆（完整權限）", fontSize = 13.sp, color = palette.textMain) },
+                                text = { IconText("📅 我的日曆（完整權限）", fontSize = 13.sp, color = palette.textMain) },
                                 trailingIcon = if (viewingCode == null) {
-                                    { Icon(Icons.Filled.Check, contentDescription = null, tint = palette.accentText) }
+                                    { Icon(Tabler.Check, contentDescription = null, tint = palette.accentText) }
                                 } else null,
                                 onClick = { sourceOpen = false; onSelectSource(null) }
                             )
                             subscriptions.forEach { sub ->
                                 DropdownMenuItem(
-                                    text = { Text("👀 ${sub.name}", fontSize = 13.sp, color = palette.textMain) },
+                                    text = { IconText("👀 ${sub.name}", fontSize = 13.sp, color = palette.textMain) },
                                     trailingIcon = if (viewingCode == sub.code) {
-                                        { Icon(Icons.Filled.Check, contentDescription = null, tint = palette.accentText) }
+                                        { Icon(Tabler.Check, contentDescription = null, tint = palette.accentText) }
                                     } else null,
                                     onClick = { sourceOpen = false; onSelectSource(sub.code) }
                                 )
@@ -293,7 +276,7 @@ fun ReverieDrawerContent(
                             .padding(horizontal = 12.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Outlined.VolunteerActivism, contentDescription = null, tint = if (holidayCompare) EMERALD.readable() else palette.textMain, modifier = Modifier.size(18.dp))
+                        Icon(Tabler.HeartHandshake, contentDescription = null, tint = if (holidayCompare) EMERALD.readable() else palette.textMain, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("雙方共同休假日對照", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain, modifier = Modifier.weight(1f))
                         Text(
@@ -353,7 +336,7 @@ fun ReverieDrawerContent(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.BarChart, contentDescription = null, tint = palette.accentText, modifier = Modifier.size(17.dp))
+                        Icon(Tabler.ChartBar, contentDescription = null, tint = palette.accentText, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("${currentYearMonth.monthValue}月排班工時統計", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText, modifier = Modifier.weight(1f))
                         Text("預估 $hoursText hr", fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f))
@@ -371,7 +354,7 @@ fun ReverieDrawerContent(
                     Text("智慧防護與快速工具", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
                     val hasConflict = conflictCount > 0
                     ToolRow(
-                        icon = Icons.Outlined.WarningAmber,
+                        icon = Tabler.AlertTriangle,
                         iconColor = (if (hasConflict) AMBER else EMERALD).readable(),
                         title = "休假日鬧鐘防呆檢測",
                         sub = "檢查明日休假與上班鬧鐘衝突",
@@ -383,7 +366,7 @@ fun ReverieDrawerContent(
                         onRunSafeguardCheck()
                     }
                     ToolRow(
-                        icon = Icons.Outlined.CalendarMonth,
+                        icon = Tabler.CalendarMonth,
                         iconColor = palette.textMuted,
                         title = "一鍵匯入國定假日",
                         sub = "匯入年度假日並啟用防誤響",
@@ -396,7 +379,7 @@ fun ReverieDrawerContent(
                         onCloseDrawer()
                     }
                     ToolRow(
-                        icon = Icons.Outlined.Shield,
+                        icon = Tabler.ShieldCheck,
                         iconColor = palette.accent,
                         title = "鬧鐘權限檢查與測試",
                         sub = "確認鎖屏、省電模式下也會準時響",
@@ -427,7 +410,7 @@ fun ReverieDrawerContent(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconTile(Icons.Outlined.Settings, Color.White, palette.accent, size = 44, iconSize = 22, solid = true)
+                    IconTile(Tabler.Settings, Color.White, palette.accent, size = 44, iconSize = 22, solid = true)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("系統與質感主題設定", fontSize = 15.sp, fontWeight = FontWeight.Black, color = palette.textMain)
@@ -437,7 +420,7 @@ fun ReverieDrawerContent(
                             Text("$accentName · 備份與規則", fontSize = 12.sp, color = palette.textMuted, maxLines = 1)
                         }
                     }
-                    Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
+                    Icon(Tabler.ChevronRight, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
                 }
                 Row(
                     modifier = Modifier
@@ -455,7 +438,7 @@ fun ReverieDrawerContent(
                     Box(
                         modifier = Modifier.size(36.dp).clip(CircleShape).border(1.dp, palette.borderColor, CircleShape),
                         contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Outlined.Info, contentDescription = null, tint = palette.textMain, modifier = Modifier.size(18.dp)) }
+                    ) { Icon(Tabler.InfoCircle, contentDescription = null, tint = palette.textMain, modifier = Modifier.size(18.dp)) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -526,7 +509,7 @@ private fun ToolRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(badge, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = badgeColor)
                 Spacer(Modifier.width(2.dp))
-                Icon(Icons.AutoMirrored.Outlined.ArrowForward, contentDescription = null, tint = badgeColor, modifier = Modifier.size(15.dp))
+                Icon(Tabler.ArrowRight, contentDescription = null, tint = badgeColor, modifier = Modifier.size(15.dp))
             }
         } else {
             Text(

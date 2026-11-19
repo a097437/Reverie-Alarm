@@ -1,5 +1,9 @@
 package com.reverie.alarm
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -113,7 +117,7 @@ private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXi
 
     MotionAlertDialog(
         onDismissRequest = close,
-        title = { Text("🛡️ 鬧鐘可靠度檢查", fontWeight = FontWeight.ExtraBold) },
+        title = { IconText("🛡️ 鬧鐘可靠度檢查", fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -223,7 +227,8 @@ private fun HealthRow(
             .padding(10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (ok) "✅ " else "❌ ", fontSize = 13.sp)
+            Icon(if (ok) Tabler.CircleCheck else Tabler.CircleX, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
             Text(title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = color)
         }
         Text(desc, fontSize = 11.sp)

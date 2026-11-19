@@ -32,3 +32,6 @@ signing.properties
 # ---- 其他 ----
 *.log
 *.hprof
+
+# ---- 圖示產生器下載快取 ----
+/tools/icons/.cache/

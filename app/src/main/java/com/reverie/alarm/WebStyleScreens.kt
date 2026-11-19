@@ -34,40 +34,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ExitToApp
-import androidx.compose.material.icons.automirrored.outlined.VolumeUp
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.Alarm
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Cloud
-import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Eco
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Group
-import androidx.compose.material.icons.outlined.Lightbulb
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Menu
-import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Shield
-import androidx.compose.material.icons.outlined.Stop
-import androidx.compose.material.icons.outlined.WbSunny
-import androidx.compose.material.icons.outlined.WbTwilight
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.ChevronLeft
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -123,11 +89,11 @@ val EMERALD = Color(0xFF10B981)
 
 /** 各班別的圖示（對應網頁版 Tabler icon：sun / sunset / moon / leaf / pin） */
 fun ShiftType.icon(): ImageVector = when (this) {
-    ShiftType.EARLY -> Icons.Outlined.WbSunny
-    ShiftType.EVENING -> Icons.Outlined.WbTwilight
-    ShiftType.NIGHT -> Icons.Outlined.DarkMode
-    ShiftType.OFF -> Icons.Outlined.Eco
-    ShiftType.CUSTOM -> Icons.Outlined.PushPin
+    ShiftType.EARLY -> Tabler.Sun
+    ShiftType.EVENING -> Tabler.Sunset2
+    ShiftType.NIGHT -> Tabler.Moon
+    ShiftType.OFF -> Tabler.Leaf
+    ShiftType.CUSTOM -> Tabler.Pin
 }
 
 // ---------------------------------------------------------------------------
@@ -195,11 +161,10 @@ fun WebButton(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, tint = if (filled) Color.White else theme.textMain, modifier = Modifier.size(15.dp))
-            Spacer(Modifier.width(5.dp))
-        }
-        Text(text, fontSize = fontSize, fontWeight = FontWeight.ExtraBold, color = if (filled) Color.White else theme.textMain, maxLines = 1)
+        IconText(
+            text, icon = icon, fontSize = fontSize, fontWeight = FontWeight.ExtraBold,
+            color = if (filled) Color.White else theme.textMain, maxLines = 1
+        )
     }
 }
 
@@ -233,7 +198,7 @@ fun WebSelectBox(text: String, theme: ThemePalette, modifier: Modifier = Modifie
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(text, fontSize = fontSize, fontWeight = FontWeight.Bold, color = theme.textMain, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = theme.textMuted, modifier = Modifier.size(18.dp))
+        Icon(Tabler.ChevronDown, contentDescription = null, tint = theme.textMuted, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -320,14 +285,14 @@ fun WebTopBar(
                         .border(1.dp, theme.borderColor, RoundedCornerShape(16.dp))
                         .clickable { onOpenDrawer() },
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Outlined.Menu, contentDescription = "開啟左側收納選單", tint = theme.textMain, modifier = Modifier.size(22.dp)) }
+                ) { Icon(Tabler.Menu2, contentDescription = "開啟左側收納選單", tint = theme.textMain, modifier = Modifier.size(22.dp)) }
                 if (safeguardAlert) {
                     Box(Modifier.align(Alignment.TopEnd).size(10.dp).clip(CircleShape).background(AMBER))
                 }
             }
             Spacer(Modifier.width(6.dp))
             Icon(
-                Icons.Outlined.ChevronLeft, contentDescription = "上一期", tint = theme.textMain.copy(alpha = 0.75f),
+                Tabler.ChevronLeft, contentDescription = "上一期", tint = theme.textMain.copy(alpha = 0.75f),
                 modifier = Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).clickable { onPrev() }.padding(4.dp)
             )
             Row(
@@ -345,7 +310,7 @@ fun WebTopBar(
                 ) { Text("今", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = theme.accentText) }
             }
             Icon(
-                Icons.Outlined.ChevronRight, contentDescription = "下一期", tint = theme.textMain.copy(alpha = 0.75f),
+                Tabler.ChevronRight, contentDescription = "下一期", tint = theme.textMain.copy(alpha = 0.75f),
                 modifier = Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).clickable { onNext() }.padding(4.dp)
             )
             Spacer(Modifier.weight(1f))
@@ -358,7 +323,7 @@ fun WebTopBar(
                         .border(1.dp, if (batchMode) AMBER else theme.borderColor, RoundedCornerShape(16.dp))
                         .clickable { onToggleBatch() },
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Filled.Bolt, contentDescription = "批次一鍵排班", tint = AMBER.readable(), modifier = Modifier.size(22.dp)) }
+                ) { Icon(Tabler.Bolt, contentDescription = "批次一鍵排班", tint = AMBER.readable(), modifier = Modifier.size(22.dp)) }
                 Spacer(Modifier.width(8.dp))
             }
             Box {
@@ -369,7 +334,7 @@ fun WebTopBar(
                         .background(theme.accent)
                         .clickable { onToggleMoreMenu(true) },
                     contentAlignment = Alignment.Center
-                ) { Icon(Icons.Filled.MoreVert, contentDescription = "開啟更多操作選單", tint = Color.White, modifier = Modifier.size(22.dp)) }
+                ) { Icon(Tabler.DotsVertical, contentDescription = "開啟更多操作選單", tint = Color.White, modifier = Modifier.size(22.dp)) }
                 MotionDropdownMenu(
                     expanded = showMoreMenu,
                     onDismissRequest = { onToggleMoreMenu(false) },
@@ -382,10 +347,10 @@ fun WebTopBar(
                             fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = theme.accent
                         )
                     }
-                    MenuEntry(Icons.Outlined.Search, Color(0xFF38BDF8), "搜尋日程與鬧鐘", "關鍵字篩選班別、備註與提醒", theme) { onToggleMoreMenu(false); onSearch() }
+                    MenuEntry(Tabler.Search, Color(0xFF38BDF8), "搜尋日程與鬧鐘", "關鍵字篩選班別、備註與提醒", theme) { onToggleMoreMenu(false); onSearch() }
                     HorizontalDivider(color = theme.borderColor, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                    MenuEntry(Icons.Outlined.Add, theme.accent, "新增排班／日程", "套用班別模板、備註與附件", theme, solid = true) { onToggleMoreMenu(false); onAddShift() }
-                    MenuEntry(Icons.Outlined.Alarm, theme.accent, "新增日期鬧鐘", "指定日曆日期精準強效提醒", theme) { onToggleMoreMenu(false); onAddAlarm() }
+                    MenuEntry(Tabler.Plus, theme.accent, "新增排班／日程", "套用班別模板、備註與附件", theme, solid = true) { onToggleMoreMenu(false); onAddShift() }
+                    MenuEntry(Tabler.Alarm, theme.accent, "新增日期鬧鐘", "指定日曆日期精準強效提醒", theme) { onToggleMoreMenu(false); onAddAlarm() }
                 }
             }
         }
@@ -422,11 +387,11 @@ private fun MenuEntry(icon: ImageVector, color: Color, title: String, sub: Strin
 @Composable
 fun WebBottomBar(selectedTab: Int, theme: ThemePalette, position: () -> Float = { selectedTab.toFloat() }, onSelect: (Int) -> Unit) {
     val items = listOf(
-        Icons.Outlined.CalendarMonth to "排班日曆",
-        Icons.Outlined.Alarm to "兩段鬧鐘",
-        Icons.Outlined.GridView to "班別模板",
-        Icons.Outlined.Group to "共享帳號",
-        Icons.Outlined.PhoneAndroid to "桌面工具"
+        Tabler.CalendarMonth to "排班日曆",
+        Tabler.Alarm to "兩段鬧鐘",
+        Tabler.LayoutGrid to "班別模板",
+        Tabler.Users to "共享帳號",
+        Tabler.DeviceMobile to "桌面工具"
     )
     Column(Modifier.fillMaxWidth().background(theme.bgCard)) {
         HorizontalDivider(color = theme.borderColor.copy(alpha = 0.7f))
@@ -596,7 +561,7 @@ fun WebAlarmsScreen(
                             )
                             WebButton(
                                 "刪除所選" + if (selected.isNotEmpty()) " (${selected.size})" else "",
-                                theme, color = ROSE.readable(), icon = Icons.Outlined.Delete, fontSize = 11.sp, vertical = 7.dp,
+                                theme, color = ROSE.readable(), icon = Tabler.Trash, fontSize = 11.sp, vertical = 7.dp,
                                 enabled = selected.isNotEmpty()
                             ) {
                                 onBatchDelete(selected.toSet())
@@ -632,7 +597,7 @@ fun WebAlarmsScreen(
                         "已過去的鬧鐘（${pastGroups.size} 天）",
                         fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = theme.textMuted, modifier = Modifier.weight(1f)
                     )
-                    Text(if (showPast) "收起 ▲" else "展開 ▼", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = theme.accentText)
+                    IconText(if (showPast) "收起 ▲" else "展開 ▼", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = theme.accentText)
                 }
             }
           }
@@ -685,8 +650,8 @@ fun WebAlarmsScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onClearDate(date) }.padding(4.dp)
                                 ) {
-                                    Icon(Icons.Outlined.Delete, contentDescription = null, tint = ROSE.readable(), modifier = Modifier.size(15.dp))
-                                    Text("清空此日", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = ROSE.readable(), softWrap = false)
+                                    Icon(Tabler.Trash, contentDescription = null, tint = ROSE.readable(), modifier = Modifier.size(15.dp))
+                                    Text("清空", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = ROSE.readable(), softWrap = false)
                                 }
                             }
                         }
@@ -720,13 +685,13 @@ fun WebAlarmsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Outlined.MusicNote, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(16.dp))
+                                Icon(Tabler.Music, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("鬧鐘鈴聲庫與手機音訊匯入", fontSize = 13.sp, fontWeight = FontWeight.Black, color = theme.textMain)
                             }
                             Text("支援從手機檔案總管匯入 MP3 / M4A / WAV 作為鬧鐘鈴聲", fontSize = 10.sp, color = theme.textMuted)
                         }
-                        WebButton("匯入手機音訊", theme, icon = Icons.Outlined.FolderOpen, fontSize = 11.sp, vertical = 7.dp) {
+                        WebButton("匯入手機音訊", theme, icon = Tabler.FolderOpen, fontSize = 11.sp, vertical = 7.dp) {
                             importTarget = null
                             picker.launch(arrayOf("audio/*"))
                         }
@@ -761,12 +726,12 @@ fun WebAlarmsScreen(
                             val playing = previewId == rt.id
                             WebButton(
                                 if (playing) "停止" else "試聽", theme, filled = playing, color = ROSE.readable(),
-                                icon = if (playing) Icons.Outlined.Stop else Icons.Outlined.PlayArrow, fontSize = 11.sp, vertical = 5.dp, radius = 10.dp
+                                icon = if (playing) Tabler.PlayerStop else Tabler.PlayerPlay, fontSize = 11.sp, vertical = 5.dp, radius = 10.dp
                             ) { togglePreview(rt) }
                             if (!rt.isBuiltIn) {
                                 Spacer(Modifier.width(6.dp))
                                 Icon(
-                                    Icons.Outlined.Delete, contentDescription = "移除匯入音檔", tint = ROSE.readable(),
+                                    Tabler.Trash, contentDescription = "移除匯入音檔", tint = ROSE.readable(),
                                     modifier = Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).clickable {
                                         if (playing) togglePreview(rt)
                                         onDeleteRingtone(rt)
@@ -791,7 +756,7 @@ private fun RingtoneDropdown(ringtones: List<RingtoneEntry>, current: RingtoneEn
                 DropdownMenuItem(
                     text = { Text(rt.name, fontSize = 13.sp, color = theme.textMain) },
                     trailingIcon = if (rt.id == current?.id) {
-                        { Icon(Icons.Filled.Check, contentDescription = null, tint = theme.accentText) }
+                        { Icon(Tabler.Check, contentDescription = null, tint = theme.accentText) }
                     } else null,
                     onClick = { open = false; onPick(rt) }
                 )
@@ -840,7 +805,7 @@ private fun AlarmItemCard(
                         .background(if (isSelected) theme.accent else Color.Transparent)
                         .border(2.dp, if (isSelected) Color.Transparent else theme.textMuted, RoundedCornerShape(7.dp)),
                     contentAlignment = Alignment.Center
-                ) { if (isSelected) Icon(Icons.Filled.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp)) }
+                ) { if (isSelected) Icon(Tabler.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp)) }
                 Spacer(Modifier.width(10.dp))
             }
             Column(Modifier.weight(1f)) {
@@ -855,16 +820,16 @@ private fun AlarmItemCard(
                 Text(al.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.textMain.copy(alpha = alpha), maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
             }
             if (selectMode) {
-                WebButton("刪除", theme, color = ROSE.readable(), icon = Icons.Outlined.Delete, fontSize = 11.sp, vertical = 6.dp, radius = 12.dp, onClick = onDelete)
+                WebButton("刪除", theme, color = ROSE.readable(), icon = Tabler.Trash, fontSize = 11.sp, vertical = 6.dp, radius = 12.dp, onClick = onDelete)
             } else {
-                WebButton("試響", theme, filled = false, icon = Icons.AutoMirrored.Outlined.VolumeUp, fontSize = 11.sp, vertical = 6.dp, radius = 14.dp, onClick = onTestRing)
+                WebButton("試響", theme, filled = false, icon = Tabler.Volume, fontSize = 11.sp, vertical = 6.dp, radius = 14.dp, onClick = onTestRing)
                 Spacer(Modifier.width(8.dp))
                 WebToggle(al.enabled, theme, onToggle)
             }
         }
         HorizontalDivider(color = theme.borderColor.copy(alpha = 0.7f))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.MusicNote, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(14.dp))
+            Icon(Tabler.Music, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(14.dp))
             Text(" 鈴聲：", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.accentText)
             RingtoneDropdown(ringtones, currentRingtone, theme, Modifier.weight(1f), onPickRingtone)
             Spacer(Modifier.width(8.dp))
@@ -875,7 +840,7 @@ private fun AlarmItemCard(
                     .border(1.dp, theme.accent.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
                     .clickable { onImport() }
                     .padding(horizontal = 10.dp, vertical = 8.dp)
-            ) { Text("+ 匯入", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.accentText) }
+            ) { IconText("+ 匯入", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.accentText) }
         }
     }
 }
@@ -906,7 +871,7 @@ fun WebTemplatesScreen(
             WebCard(theme, radius = 20.dp, bg = theme.accent.copy(alpha = 0.10f), border = theme.accent.copy(alpha = 0.35f)) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Lightbulb, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(16.dp))
+                        Icon(Tabler.Bulb, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("班別模板自由時段設定", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = theme.accentText)
                     }
@@ -928,7 +893,7 @@ fun WebTemplatesScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(16.dp))
+                            Icon(Tabler.CalendarMonth, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text("國定假日行事曆連動", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = EMERALD.readable())
                         }
@@ -953,7 +918,7 @@ fun WebTemplatesScreen(
             val typeNames = mapOf(ShiftType.EARLY to "琥珀金 (早班系)", ShiftType.EVENING to "靛紫色 (晚班系)", ShiftType.NIGHT to "青綠色 (夜班系)")
             WebCard(theme, radius = 24.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("+ 新增自訂輪班模板", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
+                    IconText("+ 新增自訂輪班模板", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         WebTextField(name, "模板名稱 (如: 中班)", theme, Modifier.weight(1f)) { name = it }
                         Box(Modifier.weight(1f)) {
@@ -1034,7 +999,7 @@ private fun TemplateCard(tpl: ShiftTemplate, theme: ThemePalette, isDefault: Boo
                         modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(ROSE.copy(alpha = 0.12f)).clickable { onDelete() }.padding(horizontal = 8.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Outlined.Delete, contentDescription = null, tint = ROSE.readable(), modifier = Modifier.size(14.dp))
+                        Icon(Tabler.Trash, contentDescription = null, tint = ROSE.readable(), modifier = Modifier.size(14.dp))
                         Text("刪除", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ROSE.readable())
                     }
                 }
@@ -1049,7 +1014,7 @@ private fun TemplateCard(tpl: ShiftTemplate, theme: ThemePalette, isDefault: Boo
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Outlined.Shield, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(16.dp))
+                    Icon(Tabler.ShieldCheck, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("全天休假・自動啟動「休假日鬧鐘防呆」偵測", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = EMERALD.readable())
                 }
@@ -1094,7 +1059,7 @@ private fun TemplateCard(tpl: ShiftTemplate, theme: ThemePalette, isDefault: Boo
                         ) {
                             val c = (if (isWake) ROSE else AMBER).readable()
                             Icon(
-                                if (isWake) Icons.Outlined.NotificationsActive else Icons.AutoMirrored.Outlined.ExitToApp,
+                                if (isWake) Tabler.BellRinging else Tabler.DoorExit,
                                 contentDescription = null, tint = c, modifier = Modifier.size(14.dp)
                             )
                             Spacer(Modifier.width(3.dp))
@@ -1162,7 +1127,7 @@ fun WebSharingScreen(
             WebCard(theme, radius = 26.dp, padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Cloud, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(18.dp))
+                        Icon(Tabler.Cloud, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("帳號與雲端資料隔離", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.accentText, modifier = Modifier.weight(1f))
                         Box(
@@ -1230,7 +1195,7 @@ fun WebSharingScreen(
             WebCard(theme, radius = 26.dp, padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Link, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(18.dp))
+                        Icon(Tabler.Link, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("我的公開班表共享（唯讀）", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.accentText, modifier = Modifier.weight(1f))
                         if (signedIn) {
@@ -1295,7 +1260,7 @@ fun WebSharingScreen(
                             .border(1.dp, EMERALD.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
                             .padding(12.dp)
                     ) {
-                        Icon(Icons.Outlined.Lock, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(16.dp).padding(top = 1.dp))
+                        Icon(Tabler.Lock, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(16.dp).padding(top = 1.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
                             buildAnnotatedString {
@@ -1314,7 +1279,7 @@ fun WebSharingScreen(
             WebCard(theme, radius = 26.dp, padding = 16.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Group, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(18.dp))
+                        Icon(Tabler.Users, contentDescription = null, tint = theme.accentText, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("已訂閱的親友／伴侶班表", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.accentText, modifier = Modifier.weight(1f))
                         val on = partnerSync.holidayCompare
@@ -1329,7 +1294,7 @@ fun WebSharingScreen(
                                 }
                                 .padding(horizontal = 10.dp, vertical = 7.dp)
                         ) {
-                            Text(if (on) "✓ 共同休假對照中" else "共同休假對照", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = if (on) EMERALD.readable() else theme.textMain)
+                            IconText(if (on) "✓ 共同休假對照中" else "共同休假對照", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = if (on) EMERALD.readable() else theme.textMain)
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1381,7 +1346,7 @@ fun WebSharingScreen(
                             ) { onOpenPartnerCalendar(sub) }
                             Spacer(Modifier.width(4.dp))
                             Icon(
-                                Icons.Outlined.Delete, contentDescription = "取消訂閱", tint = theme.textMuted,
+                                Tabler.Trash, contentDescription = "取消訂閱", tint = theme.textMuted,
                                 modifier = Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).clickable { confirmUnsub = sub }.padding(7.dp)
                             )
                         }
@@ -1453,7 +1418,7 @@ fun PublicSchedulePreview(title: String, rows: List<PartnerShift>, theme: ThemeP
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Shield, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(14.dp))
+                    Icon(Tabler.ShieldCheck, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(footer, fontSize = 11.sp, color = EMERALD.readable())
                 }
@@ -1542,7 +1507,7 @@ fun EditCapsulePopup(isFirstRow: Boolean, theme: ThemePalette, onEdit: () -> Uni
                 .padding(horizontal = 16.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Icon(Tabler.Pencil, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
             Text("編輯", fontSize = 14.sp, fontWeight = FontWeight.Black, color = Color.White)
         }

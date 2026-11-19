@@ -6,8 +6,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.lifecycle.lifecycleScope
-import androidx.compose.material.icons.automirrored.outlined.VolumeUp
-import androidx.compose.material.icons.outlined.Alarm
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.AlarmManager
@@ -40,23 +38,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -727,7 +708,7 @@ fun ReverieAlarmApp() {
         var count = 0
         holidays2026.forEach { (hDate, hLabel) ->
             if (events.none { it.date == hDate }) {
-                applyTemplateToDate(hDate, offTpl, "🇹🇼 $hLabel", autoSave = false)
+                applyTemplateToDate(hDate, offTpl, hLabel, autoSave = false)
                 count++
             }
         }
@@ -1251,7 +1232,7 @@ fun ReverieAlarmApp() {
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
+                            IconText(
                                 "👀 正在唯讀檢視共享班表（對方鬧鐘與私人備註已隱藏）",
                                 color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
@@ -1518,7 +1499,7 @@ fun ReverieAlarmApp() {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
+                                    IconText(
                                         text = "⚡ 已選取 ${batchSelectedDates.size} 天 — 點擊班別一鍵填入：",
                                         color = Color(0xFFFBBF24).readable(),
                                         fontSize = 12.sp,
@@ -1938,10 +1919,10 @@ fun CalendarScreen(
                                             )
                                         }
                                         if (isMutualOff) {
-                                            Text(
-                                                text = "💞",
-                                                fontSize = 9.sp,
-                                                modifier = Modifier.align(Alignment.TopStart)
+                                            Icon(
+                                                Tabler.Hearts, contentDescription = "共同休假",
+                                                tint = EMERALD.readableOn(cellBg, 3.0),
+                                                modifier = Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 4.dp).size(11.dp)
                                             )
                                         }
                                     }
@@ -2024,7 +2005,7 @@ fun CalendarScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
+                    IconText(
                         text = "⚠️ 明日為休假但仍有 $tomorrowConflictCount 個上班鬧鐘開啟",
                         color = Color(0xFFFCD34D).readable(),
                         fontSize = (12 * fontScale).sp,
@@ -2169,7 +2150,7 @@ fun CalendarScreen(
                                         .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp))
                                         .padding(horizontal = 10.dp),
                                     contentAlignment = Alignment.Center
-                                ) { Text("📄 ${att.name}", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold, maxLines = 1) }
+                                ) { IconText("📄 ${att.name}", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold, maxLines = 1) }
                             }
                         }
                     }
@@ -2186,16 +2167,16 @@ fun CalendarScreen(
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
+                            IconText(
                                 "🛡️ 基於隱私隔離機制，對方的私人備註、排班圖片、附件與起床鬧鐘均已隱藏。",
                                 fontSize = 12.sp, color = Color(0xFFA855F7).readable(), fontWeight = FontWeight.Bold
                             )
                         }
                     } else Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Alarm, contentDescription = null, tint = theme.textMuted, modifier = Modifier.size(15.dp))
+                        Icon(Tabler.Alarm, contentDescription = null, tint = theme.textMuted, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(4.dp))
                         Text("當日兩段式鬧鐘（${selectedDayAlarms.size}）", color = theme.textMain.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Text(
+                        IconText(
                             "+ 新增鬧鐘", color = effectiveAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAddAlarm() }.padding(4.dp)
                         )
@@ -2243,7 +2224,7 @@ fun CalendarScreen(
                                         .clickable { onTestRing(al) },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = "試響", tint = theme.textMain, modifier = Modifier.size(17.dp))
+                                    Icon(Tabler.Volume, contentDescription = "試響", tint = theme.textMain, modifier = Modifier.size(17.dp))
                                 }
                                 Spacer(Modifier.width(10.dp))
                                 WebToggle(al.enabled, theme) { onToggleAlarm(al) }
@@ -2255,11 +2236,18 @@ fun CalendarScreen(
         }
 
         item {
-            Text(
-                "← 左右滑動下方區域切換功能分頁 →",
-                fontSize = 11.sp, color = theme.textMuted.copy(alpha = 0.7f), fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val hint = theme.textMuted.copy(alpha = 0.7f)
+                Icon(Tabler.ChevronLeft, contentDescription = null, tint = hint, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("左右滑動下方區域切換功能分頁", fontSize = 11.sp, color = hint, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(4.dp))
+                Icon(Tabler.ChevronRight, contentDescription = null, tint = hint, modifier = Modifier.size(13.dp))
+            }
         }
     }
 }
@@ -2357,7 +2345,7 @@ fun WidgetsPreviewScreen(todayShift: ShiftEvent?, nextAlarm: ShiftAlarm?, theme:
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("📲 如何釘選至手機桌面？", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
+                IconText("📲 如何釘選至手機桌面？", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
                 Text("1. 返回手機主畫面並長按空白處 → 點選「小工具 (Widgets)」。", fontSize = 12.sp, color = theme.textMuted)
                 Text("2. 找到「Reverie Alarm」並拖曳 4×2 班表鬧鐘卡片至桌面即可。", fontSize = 12.sp, color = theme.textMuted)
                 Button(
@@ -2380,7 +2368,7 @@ fun WidgetsPreviewScreen(todayShift: ShiftEvent?, nextAlarm: ShiftAlarm?, theme:
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("📌 嘗試一鍵釘選小工具至桌面", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    IconText("📌 嘗試一鍵釘選小工具至桌面", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

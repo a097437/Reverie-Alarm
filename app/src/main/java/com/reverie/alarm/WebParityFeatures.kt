@@ -32,8 +32,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -147,7 +145,7 @@ fun UriImage(uriStr: String, maxSide: Int, modifier: Modifier = Modifier, conten
         if (b != null) {
             Image(b.asImageBitmap(), contentDescription = null, contentScale = contentScale, modifier = Modifier.fillMaxSize())
         } else {
-            Text("🖼️", fontSize = 18.sp)
+            Icon(Tabler.Photo, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -173,7 +171,7 @@ fun ImageLightbox(images: List<ShiftAttachment>, startIndex: Int, theme: ThemePa
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    Icons.Default.Close, contentDescription = "關閉", tint = Color.White,
+                    Tabler.X, contentDescription = "關閉", tint = Color.White,
                     modifier = Modifier.size(28.dp).clickable { onDismiss() }
                 )
             }
@@ -232,7 +230,7 @@ private fun ChipRow(options: List<Pair<String, String>>, selected: String, theme
                     .clickable { onSelect(id) }
                     .padding(horizontal = 10.dp, vertical = 7.dp)
             ) {
-                Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else theme.textMain)
+                IconText(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (active) Color.White else theme.textMain)
             }
         }
     }
@@ -241,10 +239,10 @@ private fun ChipRow(options: List<Pair<String, String>>, selected: String, theme
 @Composable
 private fun SubHeader(title: String, theme: ThemePalette, action: String? = null, onAction: () -> Unit = {}) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = theme.textMain, modifier = Modifier.weight(1f))
+        IconText(title, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = theme.textMain, modifier = Modifier.weight(1f))
         if (action != null) {
-            Text(
-                action, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.accent,
+            IconText(
+                action, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.accentText,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAction() }.padding(6.dp)
             )
         }
@@ -281,7 +279,7 @@ fun MediaSection(
                             .background(Color.Black.copy(alpha = 0.6f))
                             .clickable { attachments.remove(img) },
                         contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Default.Close, contentDescription = "移除圖片", tint = Color.White, modifier = Modifier.size(12.dp)) }
+                    ) { Icon(Tabler.X, contentDescription = "移除圖片", tint = Color.White, modifier = Modifier.size(12.dp)) }
                 }
             }
         }
@@ -300,7 +298,7 @@ fun MediaSection(
             Text(ext, fontSize = 9.sp, fontWeight = FontWeight.Black, color = theme.accentText, modifier = Modifier.width(40.dp))
             Text(att.name, fontSize = 11.sp, color = theme.textMain, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Icon(
-                Icons.Default.Close, contentDescription = "移除附件", tint = Color(0xFFF43F5E),
+                Tabler.X, contentDescription = "移除附件", tint = Color(0xFFF43F5E),
                 modifier = Modifier.size(16.dp).clickable { attachments.remove(att) }
             )
         }
@@ -434,7 +432,7 @@ fun DateEditSheet(
                             )
                             Spacer(Modifier.width(6.dp))
                             Icon(
-                                Icons.Default.Close, contentDescription = "刪除鬧鐘", tint = Color(0xFFF43F5E),
+                                Tabler.X, contentDescription = "刪除鬧鐘", tint = Color(0xFFF43F5E),
                                 modifier = Modifier.size(20.dp).clickable { onAlarmDelete(al) }
                             )
                         }
@@ -443,10 +441,10 @@ fun DateEditSheet(
             }
 
             // 多行私人備註
-            Text("📝 多行私人備註（僅本人可見）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+            IconText("📝 多行私人備註（僅本人可見）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("【交接事項】", "【攜帶物品】", "【調班紀錄】").forEach { tag ->
-                    Text(
+                    IconText(
                         "+ ${tag.trim('【', '】')}", fontSize = 11.sp, color = theme.accent, fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
@@ -531,7 +529,7 @@ fun AddAlarmSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("⏰ 新增日期鬧鐘", fontSize = 18.sp, fontWeight = FontWeight.Black)
+            IconText("⏰ 新增日期鬧鐘", fontSize = 18.sp, fontWeight = FontWeight.Black)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text("指定日曆日期", fontSize = 11.sp, color = theme.textMuted)
@@ -549,7 +547,7 @@ fun AddAlarmSheet(
                 }
                 TimeField("響鈴時間", time, theme, Modifier.weight(1f)) { time = it }
             }
-            Text(
+            IconText(
                 formatCountdown(now.withSecond(0).withNano(0), LocalDateTime.of(date, time)),
                 fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.accent
             )

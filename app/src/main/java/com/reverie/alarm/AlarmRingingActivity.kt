@@ -29,8 +29,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -194,7 +192,7 @@ fun RingingScreen(
                     .background(rose.copy(alpha = 0.2f), RoundedCornerShape(50))
                     .padding(horizontal = 12.dp, vertical = 4.dp)
             ) {
-                Text(badgeText, color = Color(0xFFFB7185), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                IconText(badgeText, color = Color(0xFFFB7185), fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(16.dp))
             Text(
@@ -207,7 +205,7 @@ fun RingingScreen(
             Text(subText, color = Color(0xFFFBBF24), fontSize = 12.sp, textAlign = TextAlign.Center)
             if (spec.fadeIn) {
                 Spacer(Modifier.height(8.dp))
-                Text("🔊 漸進式音量增強已啟用", color = Color(0xFF34D399), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                IconText("🔊 漸進式音量增強已啟用", color = Color(0xFF34D399), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -219,7 +217,7 @@ fun RingingScreen(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Filled.Notifications, contentDescription = null,
+                Tabler.BellRinging, contentDescription = null,
                 tint = Color(0xFFFB7185),
                 modifier = Modifier.size(48.dp).rotate(angle)
             )
