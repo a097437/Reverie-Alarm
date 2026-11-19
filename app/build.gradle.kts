@@ -51,12 +51,17 @@ android {
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
-        // 效能測試用：和正式版一樣最佳化（流暢度接近上架版），但用 debug 金鑰簽名，
-        // 可直接覆蓋安裝在開發中的 debug 版上，不用解除安裝、不會清掉資料
+        // 效能測試用：和正式版一樣最佳化（流暢度接近上架版）。
+        // 有正式版金鑰時用同一把簽名，和 GitHub Releases 的正式版可以互相覆蓋安裝、不會清掉資料；
+        // 沒有金鑰（例如別人 clone 下來編譯）時退回 debug 金鑰
         create("perfTest") {
             initWith(getByName("release"))
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (hasReleaseKey) "release" else "debug")
             matchingFallbacks += listOf("release")
+        }
+        // debug 版也用同一把金鑰，三種版本都能互相覆蓋
+        getByName("debug") {
+            if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
