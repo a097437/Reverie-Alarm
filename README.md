@@ -11,7 +11,7 @@
     <img src="https://img.shields.io/badge/Offline-離線可用-f59e0b?style=flat-square" alt="Offline" />
   </p>
 
-  <p><strong>專為輪班與通勤族群設計的排班日曆與兩段式強效鬧鐘應用</strong></p>
+  <p><strong>融合AI快速排班與通勤族群設計的日曆與兩段式強效鬧鐘應用</strong></p>
 </div>
 
 ---
