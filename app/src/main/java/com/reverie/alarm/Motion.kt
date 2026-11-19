@@ -145,6 +145,23 @@ fun overlayProgress(enterMs: Int = 320, exitMs: Int = 240): State<Float> {
 @Composable
 fun overlayClosing(): Boolean = LocalOverlayTransition.current?.targetState == false
 
+/**
+ * 全螢幕、無系統動畫的對話框視窗。
+ * 對話框是獨立視窗，不會繼承 App 的字級設定，所以這裡再套一次（不跟隨手機系統字級）。
+ */
+@Composable
+private fun AppDialog(onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        val base = LocalDensity.current
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalDensity provides androidx.compose.ui.unit.Density(base.density, UiScale.fontScale)
+        ) { content() }
+    }
+}
+
 /** 關掉 Dialog 視窗本身的系統遮罩與視窗動畫，改由我們自己畫，才能同步淡出 */
 @Composable
 private fun PlainDialogWindow() {
@@ -174,10 +191,7 @@ fun MotionBottomSheet(
     val progress by overlayProgress()
     val closing = overlayClosing()
     val dismiss by rememberUpdatedState(onDismiss)
-    Dialog(
-        onDismissRequest = { if (!closing) dismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
+    AppDialog(onDismissRequest = { if (!closing) dismiss() }) {
         PlainDialogWindow()
         var dragPx by remember { mutableFloatStateOf(0f) }
         val snapBack = remember { Animatable(0f) }
@@ -251,10 +265,7 @@ fun MotionAlertDialog(
     val closing = overlayClosing()
     val dismiss by rememberUpdatedState(onDismissRequest)
     val bg = containerColor ?: androidx.compose.material3.MaterialTheme.colorScheme.surface
-    Dialog(
-        onDismissRequest = { if (!closing) dismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
+    AppDialog(onDismissRequest = { if (!closing) dismiss() }) {
         PlainDialogWindow()
         val density = LocalDensity.current
         Box(
@@ -314,10 +325,7 @@ fun MotionFullscreen(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val progress by overlayProgress()
     val closing = overlayClosing()
     val dismiss by rememberUpdatedState(onDismiss)
-    Dialog(
-        onDismissRequest = { if (!closing) dismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
+    AppDialog(onDismissRequest = { if (!closing) dismiss() }) {
         PlainDialogWindow()
         val density = LocalDensity.current
         Box(
@@ -421,8 +429,10 @@ fun TopToastHost(palette: ThemePalette) {
     val msg = AppToast.message
     var visible by remember { mutableStateOf(false) }
     var shown by remember { mutableStateOf("") }
+    // 子頁面打開時才建立的提示氣泡，不要把打開前的舊訊息再顯示一次
+    val startSerial = remember { serial }
     LaunchedEffect(serial) {
-        if (serial == 0 || msg == null) return@LaunchedEffect
+        if (serial == 0 || serial == startSerial || msg == null) return@LaunchedEffect
         shown = msg
         visible = true
         delay(2200)

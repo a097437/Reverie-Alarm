@@ -79,6 +79,7 @@ fun ReverieDrawerContent(
     onSelectViewMode: (CalendarViewMode) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenSharing: () -> Unit,
     onRunSafeguardCheck: () -> Unit,
     onImportHolidays: () -> Unit,
     onOpenAlarmCheck: () -> Unit,
@@ -102,10 +103,10 @@ fun ReverieDrawerContent(
         ?: accentHex.uppercase()
 
     val viewItems = listOf(
-        DrawerViewItem(CalendarViewMode.YEAR, "年視圖", "全年 12 月總覽", Tabler.Calendar),
-        DrawerViewItem(CalendarViewMode.MONTH, "月視圖", "大格子月曆網格", Tabler.CalendarMonth),
-        DrawerViewItem(CalendarViewMode.WEEK, "週視圖", "7 日詳情展開", Tabler.CalendarWeek),
-        DrawerViewItem(CalendarViewMode.DAY, "日視圖", "24H 跨夜時間軸", Tabler.Clock)
+        DrawerViewItem(CalendarViewMode.YEAR, tr("年視圖"), tr("全年 12 月總覽"), Tabler.Calendar),
+        DrawerViewItem(CalendarViewMode.MONTH, tr("月視圖"), tr("大格子月曆網格"), Tabler.CalendarMonth),
+        DrawerViewItem(CalendarViewMode.WEEK, tr("週視圖"), tr("7 日詳情展開"), Tabler.CalendarWeek),
+        DrawerViewItem(CalendarViewMode.DAY, tr("日視圖"), tr("24H 跨夜時間軸"), Tabler.Clock)
     )
 
     ModalDrawerSheet(
@@ -143,7 +144,7 @@ fun ReverieDrawerContent(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
-                        Text("輪班通勤與強效鬧鐘", fontSize = 11.sp, color = palette.textMuted)
+                        Text(tr("輪班通勤與強效鬧鐘"), fontSize = 11.sp, color = palette.textMuted)
                     }
                     Box(
                         modifier = Modifier
@@ -153,7 +154,7 @@ fun ReverieDrawerContent(
                             .border(1.dp, palette.borderColor, RoundedCornerShape(14.dp))
                             .clickable { onCloseDrawer() },
                         contentAlignment = Alignment.Center
-                    ) { Icon(Tabler.X, contentDescription = "關閉側邊選單", tint = palette.textMain, modifier = Modifier.size(18.dp)) }
+                    ) { Icon(Tabler.X, contentDescription = tr("關閉側邊選單"), tint = palette.textMain, modifier = Modifier.size(18.dp)) }
                 }
 
                 // ---- 搜尋入口 ----
@@ -173,10 +174,10 @@ fun ReverieDrawerContent(
                     IconTile(Tabler.Search, Color(0xFF38BDF8), Color(0xFF38BDF8), size = 34, iconSize = 18)
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "搜尋班別、日期、備註或鬧鐘...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f),
+                        tr("搜尋班別、日期、備註或鬧鐘..."), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f),
                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
                     )
-                    Text("搜尋", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText)
+                    Text(tr("搜尋"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText)
                 }
 
                 // ---- 帳號狀態與日曆來源切換卡 ----
@@ -209,23 +210,23 @@ fun ReverieDrawerContent(
                                 .background(if (accountEmail != null) palette.accent else palette.textMuted.copy(alpha = 0.55f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(if (accountEmail != null) (CloudSync.user?.name?.takeIf { it.isNotBlank() } ?: accountEmail).take(1).uppercase() else "訪", fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color.White)
+                            Text(if (accountEmail != null) (CloudSync.user?.name?.takeIf { it.isNotBlank() } ?: accountEmail).take(1).uppercase() else tr("訪"), fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color.White)
                         }
                         Spacer(Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                if (accountEmail != null) (CloudSync.user?.name?.takeIf { it.isNotBlank() } ?: "Reverie 使用者") else "訪客單機模式",
+                                if (accountEmail != null) (CloudSync.user?.name?.takeIf { it.isNotBlank() } ?: tr("Reverie 使用者")) else tr("訪客單機模式"),
                                 fontSize = 14.sp, fontWeight = FontWeight.Black, color = palette.textMain
                             )
                             Text(
-                                accountEmail ?: "點擊一鍵登入 Google 雲端同步",
+                                accountEmail ?: tr("點擊一鍵登入 Google 雲端同步"),
                                 fontSize = 11.sp, color = palette.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                         }
                         Icon(Tabler.ChevronRight, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
                     }
 
-                    Text("檢視日曆來源", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
+                    Text(tr("檢視日曆來源"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
                     var sourceOpen by remember { mutableStateOf(false) }
                     val viewingSub = subscriptions.firstOrNull { it.code == viewingCode }
                     Box {
@@ -240,7 +241,7 @@ fun ReverieDrawerContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconText(
-                                if (viewingSub == null) "📅 我的日曆（完整權限）" else "👀 ${viewingSub.name}",
+                                if (viewingSub == null) tr("📅 我的日曆（完整權限）") else "👀 ${viewingSub.name}",
                                 fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
                             )
@@ -248,7 +249,7 @@ fun ReverieDrawerContent(
                         }
                         DropdownMenu(expanded = sourceOpen, onDismissRequest = { sourceOpen = false }, containerColor = palette.bgCard) {
                             DropdownMenuItem(
-                                text = { IconText("📅 我的日曆（完整權限）", fontSize = 13.sp, color = palette.textMain) },
+                                text = { IconText(tr("📅 我的日曆（完整權限）"), fontSize = 13.sp, color = palette.textMain) },
                                 trailingIcon = if (viewingCode == null) {
                                     { Icon(Tabler.Check, contentDescription = null, tint = palette.accentText) }
                                 } else null,
@@ -278,9 +279,9 @@ fun ReverieDrawerContent(
                     ) {
                         Icon(Tabler.HeartHandshake, contentDescription = null, tint = if (holidayCompare) EMERALD.readable() else palette.textMain, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("雙方共同休假日對照", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain, modifier = Modifier.weight(1f))
+                        Text(tr("雙方共同休假日對照"), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain, modifier = Modifier.weight(1f))
                         Text(
-                            if (holidayCompare) "已開啟" else "關閉", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
+                            if (holidayCompare) tr("已開啟") else if (I18n.isEn) "Off" else "關閉", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
                             color = if (holidayCompare) EMERALD.readable() else palette.textMuted
                         )
                     }
@@ -289,8 +290,8 @@ fun ReverieDrawerContent(
                 // ---- 日曆檢視維度 2×2 ----
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("日曆檢視維度", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
-                        Text("點選立即切換", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.accentText)
+                        Text(tr("日曆檢視維度"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
+                        Text(tr("點選立即切換"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.accentText)
                     }
                     viewItems.chunked(2).forEach { rowItems ->
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -338,27 +339,27 @@ fun ReverieDrawerContent(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Tabler.ChartBar, contentDescription = null, tint = palette.accentText, modifier = Modifier.size(17.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("${currentYearMonth.monthValue}月排班工時統計", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText, modifier = Modifier.weight(1f))
-                        Text("預估 $hoursText hr", fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f))
+                        Text(tr("{0}月排班工時統計", currentYearMonth.monthValue), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText, modifier = Modifier.weight(1f))
+                        Text(tr("預估 {0} hr", hoursText), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        StatCell("早班", early, Color(0xFFF59E0B), palette, Modifier.weight(1f))
-                        StatCell("晚班", evening, Color(0xFF818CF8), palette, Modifier.weight(1f))
-                        StatCell("夜班", night, Color(0xFF2DD4BF), palette, Modifier.weight(1f))
-                        StatCell("休假", offDays, Color(0xFF10B981), palette, Modifier.weight(1f))
+                        StatCell(tr("早班"), early, Color(0xFFF59E0B), palette, Modifier.weight(1f))
+                        StatCell(tr("晚班"), evening, Color(0xFF818CF8), palette, Modifier.weight(1f))
+                        StatCell(tr("夜班"), night, Color(0xFF2DD4BF), palette, Modifier.weight(1f))
+                        StatCell(tr("休假"), offDays, Color(0xFF10B981), palette, Modifier.weight(1f))
                     }
                 }
 
                 // ---- 智慧防護與快速工具 ----
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("智慧防護與快速工具", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
+                    Text(tr("智慧防護與快速工具"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
                     val hasConflict = conflictCount > 0
                     ToolRow(
                         icon = Tabler.AlertTriangle,
                         iconColor = (if (hasConflict) AMBER else EMERALD).readable(),
-                        title = "休假日鬧鐘防呆檢測",
-                        sub = "檢查明日休假與上班鬧鐘衝突",
-                        badge = if (hasConflict) "$conflictCount 筆衝突" else "保護中",
+                        title = tr("休假日鬧鐘防呆檢測"),
+                        sub = tr("檢查明日休假與上班鬧鐘衝突"),
+                        badge = if (hasConflict) tr("{0} 筆衝突", conflictCount) else tr("保護中"),
                         badgeColor = (if (hasConflict) AMBER else EMERALD).readable(),
                         palette = palette
                     ) {
@@ -368,9 +369,9 @@ fun ReverieDrawerContent(
                     ToolRow(
                         icon = Tabler.CalendarMonth,
                         iconColor = palette.textMuted,
-                        title = "一鍵匯入國定假日",
-                        sub = "匯入年度假日並啟用防誤響",
-                        badge = "匯入",
+                        title = tr("一鍵匯入國定假日"),
+                        sub = tr("匯入年度假日並啟用防誤響"),
+                        badge = tr("匯入"),
                         badgeColor = palette.accent,
                         palette = palette,
                         arrowBadge = true
@@ -381,9 +382,9 @@ fun ReverieDrawerContent(
                     ToolRow(
                         icon = Tabler.ShieldCheck,
                         iconColor = palette.accent,
-                        title = "鬧鐘權限檢查與測試",
-                        sub = "確認鎖屏、省電模式下也會準時響",
-                        badge = "檢查",
+                        title = tr("鬧鐘權限檢查與測試"),
+                        sub = tr("確認鎖屏、省電模式下也會準時響"),
+                        badge = tr("檢查"),
                         badgeColor = palette.accent,
                         palette = palette,
                         arrowBadge = true
@@ -397,6 +398,37 @@ fun ReverieDrawerContent(
             // ---- 底部固定：設定 / 關於 ----
             HorizontalDivider(color = palette.borderColor)
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // 共享帳號（原本的底部分頁，收進側邊欄）
+                val cloudUser = CloudSync.user
+                val invite = CloudSync.profile?.takeIf { it.publicLinkEnabled }?.inviteCode
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(palette.bgCard)
+                        .border(1.dp, palette.borderColor, RoundedCornerShape(22.dp))
+                        .clickable {
+                            onCloseDrawer()
+                            onOpenSharing()
+                        }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconTile(Tabler.Users, palette.accentText, palette.accent, size = 44, iconSize = 22)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(tr("共享帳號"), fontSize = 15.sp, fontWeight = FontWeight.Black, color = palette.textMain)
+                        Text(
+                            when {
+                                cloudUser == null -> tr("登入 Google，把班表分享給家人")
+                                invite != null -> tr("雲端同步中 · 邀請碼 {0}", invite)
+                                else -> tr("雲端同步中 · 共享已關閉")
+                            },
+                            fontSize = 12.sp, color = palette.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(Tabler.ChevronRight, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -413,11 +445,11 @@ fun ReverieDrawerContent(
                     IconTile(Tabler.Settings, Color.White, palette.accent, size = 44, iconSize = 22, solid = true)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("系統與質感主題設定", fontSize = 15.sp, fontWeight = FontWeight.Black, color = palette.textMain)
+                        Text(tr("系統與質感主題設定"), fontSize = 15.sp, fontWeight = FontWeight.Black, color = palette.textMain)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(10.dp).clip(CircleShape).background(palette.accent))
                             Spacer(Modifier.width(6.dp))
-                            Text("$accentName · 備份與規則", fontSize = 12.sp, color = palette.textMuted, maxLines = 1)
+                            Text(tr("{0} · 備份與規則", accentName), fontSize = 12.sp, color = palette.textMuted, maxLines = 1)
                         }
                     }
                     Icon(Tabler.ChevronRight, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(20.dp))
@@ -442,14 +474,14 @@ fun ReverieDrawerContent(
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("關於應用", fontSize = 15.sp, fontWeight = FontWeight.Black, color = palette.textMain)
+                            Text(tr("關於應用"), fontSize = 15.sp, fontWeight = FontWeight.Black, color = palette.textMain)
                             Spacer(Modifier.width(6.dp))
                             Text(APP_VERSION, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.textMuted)
                         }
-                        Text(if (autoCheckUpdate) "自動檢查更新已開啟" else "手動檢查更新模式", fontSize = 12.sp, color = palette.textMuted)
+                        Text(if (autoCheckUpdate) tr("自動檢查更新已開啟") else tr("手動檢查更新模式"), fontSize = 12.sp, color = palette.textMuted)
                     }
                     Text(
-                        "最新版本", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain,
+                        tr("最新版本"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
                             .background(palette.bgElevated)

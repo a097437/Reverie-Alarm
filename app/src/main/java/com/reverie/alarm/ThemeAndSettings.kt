@@ -58,13 +58,13 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v1.0.0"
+const val APP_VERSION = "v2.0.0"
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
     var fontScale by mutableFloatStateOf(1f)
 }
-const val APP_BUILD_DATE = "2026.11.19"
+const val APP_BUILD_DATE = "2026.11.20"
 
 data class ThemePalette(
     val title: String,
@@ -169,25 +169,25 @@ fun ShiftType.chipBorder(): Color = chipBorder(LocalSurface.current.isLight)
 
 data class NamedSwatch(val name: String, val hex: String)
 
-val MORANDI_SWATCHES = listOf(
-    NamedSwatch("霧霾藍", "#5B7C99"),
-    NamedSwatch("鼠尾草綠", "#7C9082"),
-    NamedSwatch("焦糖陶土", "#B87A62"),
-    NamedSwatch("煙燻紫丁香", "#8E7C93"),
-    NamedSwatch("燕麥暖沙", "#A68A64"),
-    NamedSwatch("暮光靛青", "#4F5D75"),
-    NamedSwatch("松柏深青", "#4A7C7E"),
-    NamedSwatch("乾燥玫瑰", "#A96E70"),
-    NamedSwatch("石墨炭灰", "#5C677D")
+val MORANDI_SWATCHES get() = listOf(
+    NamedSwatch(tr("霧霾藍"), "#5B7C99"),
+    NamedSwatch(tr("鼠尾草綠"), "#7C9082"),
+    NamedSwatch(tr("焦糖陶土"), "#B87A62"),
+    NamedSwatch(tr("煙燻紫丁香"), "#8E7C93"),
+    NamedSwatch(tr("燕麥暖沙"), "#A68A64"),
+    NamedSwatch(tr("暮光靛青"), "#4F5D75"),
+    NamedSwatch(tr("松柏深青"), "#4A7C7E"),
+    NamedSwatch(tr("乾燥玫瑰"), "#A96E70"),
+    NamedSwatch(tr("石墨炭灰"), "#5C677D")
 )
 
-val CALENDAR_CELL_SWATCHES = listOf(
-    NamedSwatch("深夜曜石", "#131A2A"),
-    NamedSwatch("莫蘭迪灰藍", "#1E293B"),
-    NamedSwatch("暖陶褐灰", "#262220"),
-    NamedSwatch("象牙紙白", "#FAF8F5"),
-    NamedSwatch("柔霧鼠尾草", "#EDF2EF"),
-    NamedSwatch("極簡純白", "#FFFFFF")
+val CALENDAR_CELL_SWATCHES get() = listOf(
+    NamedSwatch(tr("深夜曜石"), "#131A2A"),
+    NamedSwatch(tr("莫蘭迪灰藍"), "#1E293B"),
+    NamedSwatch(tr("暖陶褐灰"), "#262220"),
+    NamedSwatch(tr("象牙紙白"), "#FAF8F5"),
+    NamedSwatch(tr("柔霧鼠尾草"), "#EDF2EF"),
+    NamedSwatch(tr("極簡純白"), "#FFFFFF")
 )
 
 /** 等同 CSS color-mix(in srgb, a pct%, b) */
@@ -273,7 +273,7 @@ fun buildThemePalette(p: AppPreferences, systemDark: Boolean): ThemePalette {
     } else textMain
 
     return ThemePalette(
-        title = "自訂主題",
+        title = tr("自訂主題"),
         bgBase = bgBase,
         bgCard = bgCard,
         bgElevated = bgElevated,
@@ -409,7 +409,7 @@ private fun HexInputDialog(title: String, initial: String, onConfirm: (String) -
                     value = text,
                     onValueChange = { text = it.take(9) },
                     singleLine = true,
-                    label = { Text("色碼，例如 #5B7C99") }
+                    label = { Text(tr("色碼，例如 #5B7C99")) }
                 )
                 Box(
                     modifier = Modifier
@@ -424,39 +424,10 @@ private fun HexInputDialog(title: String, initial: String, onConfirm: (String) -
             TextButton(enabled = valid, onClick = {
                 val clean = "#" + text.trim().removePrefix("#").uppercase()
                 onConfirm(clean)
-            }) { Text("套用") }
+            }) { Text(tr("套用")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("取消")) } }
     )
-}
-
-@Composable
-private fun NumberBox(label: String, value: Int, range: IntRange, palette: ThemePalette, onChange: (Int) -> Unit, modifier: Modifier = Modifier) {
-    var text by remember(value) { mutableStateOf(value.toString()) }
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(palette.bgCard)
-            .border(1.dp, palette.borderColor, RoundedCornerShape(12.dp))
-            .padding(10.dp)
-    ) {
-        Text(label, fontSize = 10.sp, color = palette.textMuted)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { raw ->
-                    text = raw.filter { it.isDigit() }.take(3)
-                    text.toIntOrNull()?.let { if (it in range) onChange(it) }
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.width(84.dp),
-                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.textMain)
-            )
-            Spacer(Modifier.width(6.dp))
-            Text("分鐘", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMain)
-        }
-    }
 }
 
 /** 網頁版風格的底部大面板（滑入／滑出動畫由 MotionBottomSheet 負責） */
@@ -508,14 +479,12 @@ fun SettingsSheet(
     onUpdate: (AppPreferences) -> Unit,
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
-    onResetData: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var hexTarget by remember { mutableStateOf<String?>(null) } // "accent" / "cell"
-    var confirmReset by remember { mutableStateOf(false) }
 
     BottomPanel(palette = palette, onDismiss = onDismiss) {
-        PanelHeader("⚙️ 系統與質感主題設定", "莫蘭迪低眩光色盤、日曆習慣、防賴床與資料備份", "完成", palette, onDismiss)
+        PanelHeader(tr("⚙️ 系統與質感主題設定"), tr("莫蘭迪低眩光色盤、日曆習慣、防賴床與資料備份"), tr("完成"), palette, onDismiss)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -524,21 +493,21 @@ fun SettingsSheet(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // ---- 視覺外觀 ----
-            SectionCard("🎨 視覺外觀與莫蘭迪低眩光主題", palette, trailing = "即時套用") {
-                Text("色彩外觀模式", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+            SectionCard(tr("🎨 視覺外觀與莫蘭迪低眩光主題"), palette, trailing = tr("即時套用")) {
+                Text(tr("色彩外觀模式"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
                 SegmentedPicker(
-                    listOf("light" to "☀️ 淺色護眼", "dark" to "🌙 深色質感", "system" to "📱 跟隨系統"),
+                    listOf("light" to tr("☀️ 淺色護眼"), "dark" to tr("🌙 深色質感"), "system" to tr("📱 跟隨系統")),
                     prefs.colorMode, palette
                 ) { onUpdate(prefs.copy(colorMode = it)) }
 
-                Text("對比度等級", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+                Text(tr("對比度等級"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
                 SegmentedPicker(
-                    listOf("soft" to "柔和低眩光", "standard" to "標準均衡", "high" to "清晰高對比"),
+                    listOf("soft" to tr("柔和低眩光"), "standard" to tr("標準均衡"), "high" to tr("清晰高對比")),
                     prefs.contrast, palette
                 ) { onUpdate(prefs.copy(contrast = it)) }
 
-                Text("背景基底風格", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
-                val surfaces = listOf("tinted" to "霧面主題微醺", "graphite" to "純淨石墨灰", "warm" to "暖沙燕麥紙感", "crisp" to "極簡高對比")
+                Text(tr("背景基底風格"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+                val surfaces = listOf("tinted" to tr("霧面主題微醺"), "graphite" to tr("純淨石墨灰"), "warm" to tr("暖沙燕麥紙感"), "crisp" to tr("極簡高對比"))
                 surfaces.chunked(2).forEach { rowItems ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         rowItems.forEach { (id, label) ->
@@ -560,7 +529,7 @@ fun SettingsSheet(
 
                 val accentHex = prefs.customAccentHex.ifBlank { "#5B7C99" }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("強調主題色系（9 款莫蘭迪色盤 ＋ 自訂色碼）", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.weight(1f))
+                    Text(tr("強調主題色系（9 款莫蘭迪色盤 ＋ 自訂色碼）"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.weight(1f))
                     Text(accentHex.uppercase(), fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted)
                 }
                 SwatchGrid(
@@ -574,8 +543,8 @@ fun SettingsSheet(
 
                 Spacer(Modifier.height(2.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("日曆網格底色自訂（自動對比文字調整）", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.weight(1f))
-                    Text(if (prefs.customGridBgHex.isBlank()) "跟隨主題" else prefs.customGridBgHex.uppercase(), fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted)
+                    Text(tr("日曆網格底色自訂（自動對比文字調整）"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.weight(1f))
+                    Text(if (prefs.customGridBgHex.isBlank()) tr("跟隨主題") else prefs.customGridBgHex.uppercase(), fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val followTheme = prefs.customGridBgHex.isBlank()
@@ -587,7 +556,7 @@ fun SettingsSheet(
                             .clickable { onUpdate(prefs.copy(customGridBgHex = "")) }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Text("跟隨主題", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = if (followTheme) Color.White else palette.textMain)
+                        Text(tr("跟隨主題"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = if (followTheme) Color.White else palette.textMain)
                     }
                 }
                 SwatchGrid(
@@ -601,61 +570,64 @@ fun SettingsSheet(
             }
 
             // ---- 日曆與字級 ----
-            SectionCard("📅 日曆顯示與字體大小", palette) {
-                Text("每週起始日", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+            SectionCard(tr("📅 語言、日曆與字體"), palette) {
+                // 語言：兩種語言的名稱都用各自的文字顯示，切錯了也看得懂怎麼切回來
+                val langContext = androidx.compose.ui.platform.LocalContext.current
+                Text(tr("語言") + " · Language", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
                 SegmentedPicker(
-                    listOf("sun" to "週日開始", "mon" to "週一開始"),
+                    listOf("system" to tr("跟隨系統"), "zh" to "繁體中文", "en" to "English"),
+                    I18n.choice, palette
+                ) { I18n.setChoice(langContext, it) }
+                Text(tr("每週起始日"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+                SegmentedPicker(
+                    listOf("sun" to tr("週日開始"), "mon" to tr("週一開始")),
                     if (prefs.weekStartsOnMonday) "mon" else "sun", palette
                 ) { onUpdate(prefs.copy(weekStartsOnMonday = it == "mon")) }
-                Text("介面文字縮放", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+                Text(tr("介面文字縮放"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
                 SegmentedPicker(
-                    listOf("normal" to "標準字級", "large" to "舒適大字"),
+                    listOf("normal" to tr("標準字級"), "large" to tr("舒適大字")),
                     if (prefs.fontScale > 1.04f) "large" else "normal", palette
                 ) { onUpdate(prefs.copy(fontScale = if (it == "large") 1.1f else 1.0f)) }
             }
 
             // ---- 動態效果 ----
-            SectionCard("✨ 介面動態效果", palette, trailing = "即時套用") {
+            SectionCard(tr("✨ 介面動態效果"), palette, trailing = tr("即時套用")) {
                 ToggleRow(
-                    "介面過渡動畫",
-                    "彈窗滑入滑出、選單展開、提示氣泡、班別套用回彈",
+                    tr("介面過渡動畫"),
+                    tr("彈窗滑入滑出、選單展開、提示氣泡、班別套用回彈"),
                     prefs.animationsEnabled, palette
                 ) { onUpdate(prefs.copy(animationsEnabled = it)) }
-                Text("動畫速度", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+                Text(tr("動畫速度"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
                 Box(Modifier.graphicsLayer { alpha = if (prefs.animationsEnabled) 1f else 0.4f }) {
                     SegmentedPicker(
-                        listOf("fast" to "輕快", "normal" to "標準", "slow" to "舒緩"),
+                        listOf("fast" to tr("輕快"), "normal" to tr("標準"), "slow" to tr("舒緩")),
                         prefs.animationSpeed, palette
                     ) { if (prefs.animationsEnabled) onUpdate(prefs.copy(animationSpeed = it)) }
                 }
             }
 
-            // ---- 鬧鐘規則 ----
-            SectionCard("🔔 兩段式強效鬧鐘與防賴床規則", palette) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    NumberBox("預設第一段起床提前", prefs.defaultWakeOffset, 10..240, palette, { onUpdate(prefs.copy(defaultWakeOffset = it)) }, Modifier.weight(1f))
-                    NumberBox("預設第二段出門提前", prefs.defaultLeaveOffset, 5..180, palette, { onUpdate(prefs.copy(defaultLeaveOffset = it)) }, Modifier.weight(1f))
-                }
-                Text("最大允許貪睡次數上限（達到上限後強制鎖定貪睡按鈕）", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+            // ---- 響鈴規則（提前幾分鐘改在各班別模板設定） ----
+            SectionCard(tr("🔔 響鈴與防賴床"), palette) {
+                Text(tr("貪睡次數上限（用完後就不能再按貪睡）"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
                 SegmentedPicker(
-                    listOf("0" to "禁止", "1" to "1 次", "2" to "2 次", "3" to "3 次"),
+                    listOf("0" to tr("禁止"), "1" to tr("1 次"), "2" to tr("2 次"), "3" to tr("3 次")),
                     prefs.maxSnoozeCount.toString(), palette
                 ) { onUpdate(prefs.copy(maxSnoozeCount = it.toInt())) }
-                ToggleRow("第二段「出門倒數」禁止貪睡", "確保準時踏出家門，不因貪睡遲到", prefs.noSnoozeOnLeave, palette) {
+                ToggleRow(tr("第二段「出門倒數」禁止貪睡"), tr("確保準時踏出家門，不因貪睡遲到"), prefs.noSnoozeOnLeave, palette) {
                     onUpdate(prefs.copy(noSnoozeOnLeave = it))
                 }
-                ToggleRow("漸進式音量增強（由小到大喚醒）", "響鈴前 12 秒平滑提升音量，避免驚嚇", prefs.fadeInVolume, palette) {
+                ToggleRow(tr("漸進式音量增強（由小到大喚醒）"), tr("響鈴前 12 秒平滑提升音量，避免驚嚇"), prefs.fadeInVolume, palette) {
                     onUpdate(prefs.copy(fadeInVolume = it))
                 }
-                ToggleRow("休假日／國定假日鬧鐘防呆偵測", "自動偵測隔日休假卻忘記關閉的上班鬧鐘", prefs.autoHolidaySafeguard, palette) {
+                ToggleRow(tr("休假日／國定假日鬧鐘防呆偵測"), tr("自動偵測隔日休假卻忘記關閉的上班鬧鐘"), prefs.autoHolidaySafeguard, palette) {
                     onUpdate(prefs.copy(autoHolidaySafeguard = it))
                 }
             }
 
             // ---- 備份 ----
-            SectionCard("🗄️ 本地資料備份與還原", palette) {
+            SectionCard(tr("🗄️ 本地資料備份與還原"), palette) {
                 Text(
-                    "您的排班、鬧鐘、模板與主題設定已自動儲存於本機。您亦可匯出 JSON 備份檔保存或轉移至其他裝置。",
+                    tr("您的排班、鬧鐘、模板與主題設定已自動儲存於本機。您亦可匯出 JSON 備份檔保存或轉移至其他裝置。"),
                     fontSize = 11.sp, color = palette.textMuted
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -667,7 +639,7 @@ fun SettingsSheet(
                             .clickable { onExportBackup() }
                             .padding(vertical = 11.dp),
                         contentAlignment = Alignment.Center
-                    ) { IconText("⬇️ 匯出備份檔 (.json)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                    ) { IconText(tr("⬇️ 匯出備份檔 (.json)"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White) }
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -677,17 +649,8 @@ fun SettingsSheet(
                             .clickable { onImportBackup() }
                             .padding(vertical = 11.dp),
                         contentAlignment = Alignment.Center
-                    ) { IconText("⬆️ 還原備份檔", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMain) }
+                    ) { IconText(tr("⬆️ 還原備份檔"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMain) }
                 }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0x26F43F5E))
-                        .clickable { confirmReset = true }
-                        .padding(vertical = 9.dp),
-                    contentAlignment = Alignment.Center
-                ) { IconText("🔄 重置為初始示範資料", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF43F5E)) }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -699,28 +662,13 @@ fun SettingsSheet(
     MotionHost(hexTarget != null) {
         val target = lastHexTarget
         HexInputDialog(
-            title = if (target == "accent") "自訂強調色" else "自訂日曆底色",
+            title = if (target == "accent") tr("自訂強調色") else tr("自訂日曆底色"),
             initial = if (target == "accent") prefs.customAccentHex.ifBlank { "#5B7C99" } else prefs.customGridBgHex.ifBlank { "#131A2A" },
             onConfirm = { hex ->
                 onUpdate(if (target == "accent") prefs.copy(customAccentHex = hex) else prefs.copy(customGridBgHex = hex))
                 hexTarget = null
             },
             onDismiss = { hexTarget = null }
-        )
-    }
-
-    MotionHost(confirmReset) {
-        MotionAlertDialog(
-            onDismissRequest = { confirmReset = false },
-            title = { Text("確定要重置？") },
-            text = { Text("所有排班、鬧鐘與備註都會清除並換成示範資料，建議先匯出備份。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmReset = false
-                    onResetData()
-                }) { Text("重置", color = Color(0xFFF43F5E)) }
-            },
-            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("取消") } }
         )
     }
 }
@@ -748,7 +696,7 @@ private fun SwatchGrid(
                                 .border(1.dp, palette.borderColor, CircleShape)
                                 .clickable { onCustom() },
                             contentAlignment = Alignment.Center
-                        ) { Icon(Tabler.Plus, contentDescription = "自訂色碼", tint = palette.textMain, modifier = Modifier.size(16.dp)) }
+                        ) { Icon(Tabler.Plus, contentDescription = tr("自訂色碼"), tint = palette.textMain, modifier = Modifier.size(16.dp)) }
                     } else {
                         SwatchDot(sw.hex, sw.hex.equals(selectedHex, ignoreCase = true), ringColor) { onPick(sw.hex) }
                     }
@@ -764,17 +712,28 @@ private fun SwatchGrid(
 
 data class ChangelogEntry(val version: String, val date: String, val highlights: List<String>)
 
-val APP_CHANGELOG = listOf(
+val APP_CHANGELOG get() = listOf(
+    ChangelogEntry(
+        "v2.0.0", "2026.11.20", listOf(
+            tr("AI快速排班：用聊的、用說的，或拍一張班表照片，Gemini 幫你排好整個月（登入 Google 即可使用，不用設定金鑰）"),
+            tr("沒登入也能用：手機上就能看懂「21 到 25 號早班」「下週一三五晚班」這類說法"),
+            tr("天氣分頁：結合班表的通勤天氣、帶傘提醒、24 小時與 7 天預報、天氣特報"),
+            tr("支援英文介面：設定裡可切換「跟隨系統／繁體中文／English」"),
+            tr("全新日曆格子：每格顯示班別與天氣小圖示"),
+            tr("兩段鬧鐘清單、班別模板、桌面小工具頁面全面改版，時間改用滾輪選擇"),
+            tr("修正桌面小工具「載入時出現問題」")
+        )
+    ),
     ChangelogEntry(
         "v1.0.0", "2026.11.19", listOf(
-            "Android 原生版首次發佈（Kotlin + Jetpack Compose）",
-            "原生鬧鐘引擎：鎖屏、App 關閉、重開機後都會準時響鈴，貪睡與出門倒數分開設定",
-            "5 首內建合成鈴聲，支援匯入手機音訊與試響",
-            "跟手月曆：左右拖曳即時預覽上／下個月，拖曳空白處切換 5 大分頁",
-            "日期上方浮動「編輯排班」膠囊與完整開關動畫，可調整動畫速度或關閉",
-            "桌面小工具：顯示今日班表與下一個鬧鐘",
-            "共享帳號：Google 登入產生邀請碼，訂閱家人或伴侶的唯讀班表（私人備註、圖片與鬧鐘不會上傳）",
-            "色彩模式、對比度、背景風格與 9 款莫蘭迪色盤，所有組合都通過文字對比檢查"
+            tr("Android 原生版首次發佈（Kotlin + Jetpack Compose）"),
+            tr("原生鬧鐘引擎：鎖屏、App 關閉、重開機後都會準時響鈴，貪睡與出門倒數分開設定"),
+            tr("5 首內建合成鈴聲，支援匯入手機音訊與試響"),
+            tr("跟手月曆：左右拖曳即時預覽上／下個月，拖曳空白處切換 5 大分頁"),
+            tr("日期上方浮動「編輯排班」膠囊與完整開關動畫，可調整動畫速度或關閉"),
+            tr("桌面小工具：顯示今日班表與下一個鬧鐘"),
+            tr("共享帳號：Google 登入產生邀請碼，訂閱家人或伴侶的唯讀班表（私人備註、圖片與鬧鐘不會上傳）"),
+            tr("色彩模式、對比度、背景風格與 9 款莫蘭迪色盤，所有組合都通過文字對比檢查")
         )
     )
 )
@@ -787,7 +746,7 @@ fun ChangelogDialog(palette: ThemePalette, onExportLogs: () -> Unit, onDismiss: 
         title = {
             Column {
                 Text("Reverie Alarm $APP_VERSION", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = palette.accentText, fontWeight = FontWeight.ExtraBold)
-                Text("版本更新日誌", fontWeight = FontWeight.ExtraBold, color = palette.textMain, fontSize = 15.sp)
+                Text(tr("版本更新日誌"), fontWeight = FontWeight.ExtraBold, color = palette.textMain, fontSize = 15.sp)
             }
         },
         text = {
@@ -804,7 +763,7 @@ fun ChangelogDialog(palette: ThemePalette, onExportLogs: () -> Unit, onDismiss: 
                         Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(
-                                    rel.version + if (idx == 0) "  最新穩定版" else "",
+                                    rel.version + if (idx == 0) tr("  最新穩定版") else "",
                                     fontSize = 12.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, color = palette.accent
                                 )
                                 Text(rel.date, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted)
@@ -817,8 +776,8 @@ fun ChangelogDialog(palette: ThemePalette, onExportLogs: () -> Unit, onDismiss: 
                 }
             }
         },
-        dismissButton = { TextButton(onClick = onExportLogs) { Text("匯出日誌", color = palette.textMain) } },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("我知道了", color = palette.accentText, fontWeight = FontWeight.Bold) } }
+        dismissButton = { TextButton(onClick = onExportLogs) { Text(tr("匯出日誌"), color = palette.textMain) } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(tr("我知道了"), color = palette.accentText, fontWeight = FontWeight.Bold) } }
     )
 }
 
@@ -833,7 +792,7 @@ fun AboutAppSheet(
 ) {
     val context = LocalContext.current
     BottomPanel(palette = palette, heightFraction = 0.82f, onDismiss = onDismiss) {
-        PanelHeader("ℹ️ 關於 Reverie Alarm 應用", "版本資訊、自動檢查更新與日誌紀錄", "關閉", palette, onDismiss)
+        PanelHeader(tr("ℹ️ 關於 Reverie Alarm 應用"), tr("版本資訊、自動檢查更新與日誌紀錄"), tr("關閉"), palette, onDismiss)
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -856,13 +815,13 @@ fun AboutAppSheet(
                         Text("Reverie Alarm", fontSize = 16.sp, fontWeight = FontWeight.Black, color = palette.textMain)
                         Text(APP_VERSION, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.ExtraBold, color = palette.accentText)
                     }
-                    Text("輪班通勤排程・兩段式強效防遲到鬧鐘日曆", fontSize = 12.sp, color = palette.textMuted)
-                    Text("正式穩定版 (Stable) · 建置日期：$APP_BUILD_DATE", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted)
+                    Text(tr("輪班通勤排程・兩段式強效防遲到鬧鐘日曆"), fontSize = 12.sp, color = palette.textMuted)
+                    Text(tr("正式穩定版 (Stable) · 建置日期：{0}", APP_BUILD_DATE), fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted)
                 }
             }
 
-            SectionCard("✨ 版本更新與檢查設定", palette) {
-                ToggleRow("啟動時自動檢查更新", "每次開啟應用時自動比對最新正式穩定版", prefs.autoCheckUpdate, palette, onToggleAutoCheck)
+            SectionCard(tr("✨ 版本更新與檢查設定"), palette) {
+                ToggleRow(tr("啟動時自動檢查更新"), tr("每次開啟應用時自動比對最新正式穩定版"), prefs.autoCheckUpdate, palette, onToggleAutoCheck)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -875,10 +834,10 @@ fun AboutAppSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        IconText("📋 更新日誌", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain)
-                        Text("點擊查看 Reverie Alarm 各版本功能更新內容", fontSize = 10.sp, color = palette.textMuted)
+                        IconText(tr("📋 更新日誌"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain)
+                        Text(tr("點擊查看 Reverie Alarm 各版本功能更新內容"), fontSize = 10.sp, color = palette.textMuted)
                     }
-                    Text("查看 ›", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.accentText)
+                    Text(tr("查看 ›"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.accentText)
                 }
                 Box(
                     modifier = Modifier
@@ -889,7 +848,7 @@ fun AboutAppSheet(
                         .clickable { onExportLogs() }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
-                ) { IconText("⬇️ 匯出日誌（.txt）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText) }
+                ) { IconText(tr("⬇️ 匯出日誌（.txt）"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText) }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -897,11 +856,11 @@ fun AboutAppSheet(
                         .background(palette.accent)
                         .clickable {
                             // 目前沒有線上更新伺服器：以安裝中的版本為準
-                            AppToast.show("✅ 目前已是最新穩定版（$APP_VERSION）")
+                            AppToast.show(tr("✅ 目前已是最新穩定版（{0}）", APP_VERSION))
                         }
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
-                ) { IconText("🔄 立即檢查更新（目前 $APP_VERSION 穩定版）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White) }
+                ) { IconText(tr("🔄 立即檢查更新（目前 {0} 穩定版）", APP_VERSION), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White) }
             }
         }
     }
@@ -925,11 +884,11 @@ fun HolidaySafeguardDialog(
         onDismissRequest = onKeep,
         containerColor = palette.bgCard,
         icon = { Icon(Tabler.AlertTriangle, contentDescription = null, tint = amber.readableOn(palette.bgCard, 3.0), modifier = Modifier.size(30.dp)) },
-        title = { Text("休假日鬧鐘防呆提醒", fontWeight = FontWeight.ExtraBold, color = palette.textMain) },
+        title = { Text(tr("休假日鬧鐘防呆提醒"), fontWeight = FontWeight.ExtraBold, color = palette.textMain) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "偵測到明天（$tomorrowLabel）為「$holidayName」，但明日仍有 ${riskyAlarms.size} 個開啟中的鬧鐘，是否一鍵暫停？",
+                    tr("偵測到明天（{0}）為「{1}」，但明日仍有 {2} 個開啟中的鬧鐘，是否一鍵暫停？", tomorrowLabel, holidayName, riskyAlarms.size),
                     fontSize = 12.sp, color = palette.textMain
                 )
                 riskyAlarms.sortedBy { it.triggerTime }.forEach { al ->
@@ -941,13 +900,13 @@ fun HolidaySafeguardDialog(
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(al.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMain, modifier = Modifier.weight(1f), maxLines = 1)
+                        Text(trLabel(al.label), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMain, modifier = Modifier.weight(1f), maxLines = 1)
                         Text(al.triggerTime.toString(), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.ExtraBold, color = amber)
                     }
                 }
             }
         },
-        dismissButton = { TextButton(onClick = onKeep) { Text("保持開啟", color = palette.textMain) } },
-        confirmButton = { TextButton(onClick = onPauseAll) { Text("一鍵暫停明日鬧鐘", color = amber, fontWeight = FontWeight.ExtraBold) } }
+        dismissButton = { TextButton(onClick = onKeep) { Text(tr("保持開啟"), color = palette.textMain) } },
+        confirmButton = { TextButton(onClick = onPauseAll) { Text(tr("一鍵暫停明日鬧鐘"), color = amber, fontWeight = FontWeight.ExtraBold) } }
     )
 }

@@ -212,9 +212,9 @@ object AlarmEngine {
         val spec = AlarmSpec(
             key = "test-" + System.currentTimeMillis(),
             triggerLocal = t.toString(),
-            label = "測試鬧鐘（確認鎖屏也會響）",
+            label = tr("測試鬧鐘（確認鎖屏也會響）"),
             stage = "CUSTOM",
-            stageLabel = "測試",
+            stageLabel = tr("測試"),
             maxSnooze = 1
         )
         schedule(context, spec)
@@ -239,8 +239,8 @@ object AlarmEngine {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (nm.getNotificationChannel(CHANNEL_RINGING) != null) return
-        val channel = NotificationChannel(CHANNEL_RINGING, "鬧鐘響鈴", NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "時間到時跳出全螢幕響鈴畫面"
+        val channel = NotificationChannel(CHANNEL_RINGING, tr("鬧鐘響鈴"), NotificationManager.IMPORTANCE_HIGH).apply {
+            description = tr("時間到時跳出全螢幕響鈴畫面")
             // 聲音和震動由響鈴服務自己控制（才能做漸進音量）
             setSound(null, null as AudioAttributes?)
             enableVibration(false)

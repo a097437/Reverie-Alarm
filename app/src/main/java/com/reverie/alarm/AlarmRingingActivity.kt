@@ -70,6 +70,7 @@ class AlarmRingingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        I18n.ensure(applicationContext)
         wakeScreen()
 
         ContextCompat.registerReceiver(
@@ -130,13 +131,13 @@ class AlarmRingingActivity : ComponentActivity() {
 
 private fun formatDiff(from: LocalDateTime, to: LocalDateTime): String {
     val mins = Duration.between(from, to).toMinutes()
-    if (mins <= 0) return "已到達時間"
+    if (mins <= 0) return tr("已到達時間")
     val h = mins / 60
     val m = mins % 60
     return when {
-        h > 0 && m > 0 -> "$h 小時 $m 分鐘"
-        h > 0 -> "$h 小時"
-        else -> "$m 分鐘"
+        h > 0 && m > 0 -> tr("{0} 小時 {1} 分鐘", h, m)
+        h > 0 -> tr("{0} 小時", h)
+        else -> tr("{0} 分鐘", m)
     }
 }
 
@@ -157,16 +158,16 @@ fun RingingScreen(
     val isWake = spec.stage == "WAKE"
     val isLeave = spec.stage == "LEAVE"
     val badgeText = when {
-        isWake -> "🔔 第一段：強效起床喚醒"
-        isLeave -> "🚪 第二段：出門倒數提醒"
-        else -> "⏰ 日期指定強效鬧鐘"
+        isWake -> tr("🔔 第一段：強效起床喚醒")
+        isLeave -> tr("🚪 第二段：出門倒數提醒")
+        else -> tr("⏰ 日期指定強效鬧鐘")
     }
     val subText = spec.shiftStartLocal?.let { startStr ->
         runCatching {
             val start = LocalDateTime.parse(startStr)
-            "距離上班時間（${start.format(DateTimeFormatter.ofPattern("HH:mm"))}）還有 ${formatDiff(LocalDateTime.now(), start)}"
+            tr("距離上班時間（{0}）還有 {1}", start.format(DateTimeFormatter.ofPattern("HH:mm")), formatDiff(LocalDateTime.now(), start))
         }.getOrNull()
-    } ?: "指定日期：${spec.triggerLocal.take(10)}"
+    } ?: tr("指定日期：{0}", spec.triggerLocal.take(10))
     val canSnooze = AlarmRingService.canSnooze(spec)
 
     val rose = Color(0xFFF43F5E)
@@ -200,12 +201,26 @@ fun RingingScreen(
                 color = Color.White, fontSize = 64.sp, fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace
             )
             Spacer(Modifier.height(8.dp))
-            Text(spec.label, color = Color(0xFFE2E8F0), fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Text(trLabel(spec.label), color = Color(0xFFE2E8F0), fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
             Spacer(Modifier.height(4.dp))
             Text(subText, color = Color(0xFFFBBF24), fontSize = 12.sp, textAlign = TextAlign.Center)
+            if (isLeave) {
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                val hint = androidx.compose.runtime.remember {
+                    WeatherRepo.load(ctx.applicationContext)
+                    umbrellaHint(WeatherRepo.data, java.time.LocalDateTime.now())
+                }
+                if (hint != null) {
+                    Spacer(Modifier.height(10.dp))
+                    IconText(
+                        hint, icon = Tabler.Umbrella, color = Color(0xFF7DD3FC), fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.background(Color(0x3338BDF8), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
             if (spec.fadeIn) {
                 Spacer(Modifier.height(8.dp))
-                IconText("🔊 漸進式音量增強已啟用", color = Color(0xFF34D399), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                IconText(tr("🔊 漸進式音量增強已啟用"), color = Color(0xFF34D399), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
@@ -239,7 +254,7 @@ fun RingingScreen(
                         contentColor = Color(0xFFFCD34D)
                     )
                 ) {
-                    Text("貪睡 ${spec.snoozeMinutes} 分鐘（剩餘 ${spec.remainingSnooze} 次）", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(tr("貪睡 {0} 分鐘（剩餘 {1} 次）", spec.snoozeMinutes, spec.remainingSnooze), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             } else {
                 Box(
@@ -251,7 +266,7 @@ fun RingingScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "已達防賴床上限／出門倒數禁止貪睡，請立即解除！",
+                        tr("已達防賴床上限／出門倒數禁止貪睡，請立即解除！"),
                         color = Color(0xFFFDA4AF), fontSize = 12.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center
                     )
                 }
@@ -262,7 +277,7 @@ fun RingingScreen(
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE11D48))
             ) {
-                Text("點擊解除鬧鐘", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                Text(tr("點擊解除鬧鐘"), fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
             }
         }
     }

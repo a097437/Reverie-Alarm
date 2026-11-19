@@ -12,7 +12,9 @@ chart-bar check chevron-down chevron-left chevron-right chevron-up circle-check 
 database device-mobile door-exit dots-vertical download eraser eye file-text flag folder-open heart
 heart-handshake hearts hourglass info-circle layout-grid leaf link lock menu-2 moon music notes palette
 paperclip pencil photo pin player-play player-stop plus refresh search settings shield-check sparkles sun
-sunset-2 trash upload users volume x zzz""".split()
+sunset-2 trash upload users volume x zzz
+arrow-left cloud-rain cloud-storm cloud-fog cloud-snow umbrella temperature temperature-sun wind droplet map-pin sunrise sun-high
+minus microphone wand camera send key""".split()
 
 os.makedirs(DL, exist_ok=True)
 NS = '{http://www.w3.org/2000/svg}'

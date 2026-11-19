@@ -1,0 +1,5 @@
+# AGP 9.1 起 R8 預設會把類別搬到最上層套件（repackage）。
+# kotlin.text 裡有子類別繼承同套件的 package-private 類別，被搬走後在執行時會變成
+#   IllegalAccessError: Class kotlin.text.h extended by class … is inaccessible
+# 讓 kotlin.text 的類別留在原本的套件就不會發生（仍然可以被刪除、最佳化）。
+-keepnames class kotlin.text.**

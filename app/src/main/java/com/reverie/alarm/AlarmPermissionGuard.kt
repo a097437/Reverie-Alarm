@@ -72,7 +72,7 @@ private fun openSafely(context: Context, vararg intents: Intent) {
         }.isSuccess
         if (ok) return
     }
-    AppToast.show("無法開啟設定頁，請到手機「設定 → 應用程式」手動調整")
+    AppToast.show(tr("無法開啟設定頁，請到手機「設定 → 應用程式」手動調整"))
 }
 
 private fun appDetailsIntent(context: Context) =
@@ -117,21 +117,21 @@ private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXi
 
     MotionAlertDialog(
         onDismissRequest = close,
-        title = { IconText("🛡️ 鬧鐘可靠度檢查", fontWeight = FontWeight.ExtraBold) },
+        title = { IconText(tr("🛡️ 鬧鐘可靠度檢查"), fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    if (health.allCriticalOk) "必要權限都已開啟。可以按下方「1 分鐘後測試」，然後鎖屏等它響。"
-                    else "以下紅色項目沒開，鬧鐘可能不會響。請逐一點「前往開啟」。",
+                    if (health.allCriticalOk) tr("必要權限都已開啟。可以按下方「1 分鐘後測試」，然後鎖屏等它響。")
+                    else tr("以下紅色項目沒開，鬧鐘可能不會響。請逐一點「前往開啟」。"),
                     fontSize = 13.sp
                 )
                 HealthRow(
                     ok = health.notifications,
-                    title = "通知權限",
-                    desc = "響鈴畫面要靠通知跳出來",
+                    title = tr("通知權限"),
+                    desc = tr("響鈴畫面要靠通知跳出來"),
                     onFix = {
                         openSafely(
                             context,
@@ -142,8 +142,8 @@ private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXi
                 )
                 HealthRow(
                     ok = health.exactAlarm,
-                    title = "精準鬧鐘",
-                    desc = "沒開的話鬧鐘可能晚好幾分鐘",
+                    title = tr("精準鬧鐘"),
+                    desc = tr("沒開的話鬧鐘可能晚好幾分鐘"),
                     onFix = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                             openSafely(
@@ -156,8 +156,8 @@ private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXi
                 )
                 HealthRow(
                     ok = health.fullScreen,
-                    title = "全螢幕通知",
-                    desc = "鎖屏時亮屏跳出響鈴畫面",
+                    title = tr("全螢幕通知"),
+                    desc = tr("鎖屏時亮屏跳出響鈴畫面"),
                     onFix = {
                         if (Build.VERSION.SDK_INT >= 34) {
                             openSafely(
@@ -170,8 +170,8 @@ private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXi
                 )
                 HealthRow(
                     ok = health.batteryUnrestricted,
-                    title = "不限制電池用量",
-                    desc = "避免系統省電時把鬧鐘殺掉",
+                    title = tr("不限制電池用量"),
+                    desc = tr("避免系統省電時把鬧鐘殺掉"),
                     onFix = {
                         openSafely(
                             context,
@@ -184,11 +184,11 @@ private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXi
                 if (isXiaomiFamily) {
                     HealthRow(
                         ok = xiaomiAcked,
-                        title = "小米：自啟動＋省電策略",
-                        desc = "在應用程式資訊頁開啟「自啟動」，省電策略選「無限制」，開好後按「我已設定」",
-                        fixLabel = if (xiaomiAcked) "重新開啟" else "前往開啟",
+                        title = tr("小米：自啟動＋省電策略"),
+                        desc = tr("在應用程式資訊頁開啟「自啟動」，省電策略選「無限制」，開好後按「我已設定」"),
+                        fixLabel = if (xiaomiAcked) tr("重新開啟") else tr("前往開啟"),
                         onFix = { openSafely(context, appDetailsIntent(context)) },
-                        extraLabel = if (xiaomiAcked) null else "我已設定",
+                        extraLabel = if (xiaomiAcked) null else tr("我已設定"),
                         onExtra = {
                             onAckXiaomi()
                         }
@@ -199,12 +199,12 @@ private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXi
         confirmButton = {
             TextButton(onClick = {
                 val spec = AlarmEngine.scheduleTestAlarm(context, 1)
-                AppToast.show("⏰ 已設定 ${spec.triggerLocal.substring(11, 16)} 的測試鬧鐘，現在可以鎖屏等它響")
+                AppToast.show(tr("⏰ 已設定 {0} 的測試鬧鐘，現在可以鎖屏等它響", spec.triggerLocal.substring(11, 16)))
                 close()
-            }) { Text("1 分鐘後測試", fontWeight = FontWeight.Bold) }
+            }) { Text(tr("1 分鐘後測試"), fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
-            TextButton(onClick = close) { Text("稍後") }
+            TextButton(onClick = close) { Text(tr("稍後")) }
         }
     )
 }
@@ -214,7 +214,7 @@ private fun HealthRow(
     ok: Boolean,
     title: String,
     desc: String,
-    fixLabel: String = "前往開啟",
+    fixLabel: String = tr("前往開啟"),
     onFix: () -> Unit,
     extraLabel: String? = null,
     onExtra: () -> Unit = {}

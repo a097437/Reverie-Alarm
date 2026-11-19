@@ -52,22 +52,22 @@ enum class MorandiTheme(
     val textMuted: Color
 ) {
     SLATE_NIGHT(
-        "靜謐岩藍 (預設深色)",
+        tr("靜謐岩藍 (預設深色)"),
         Color(0xFF0B0F19), Color(0xFF131A2A), Color(0xFF1B2438),
         Color(0xFF232E47), Color(0xFF5B7C99), Color(0xFFF1F5F9), Color(0xFF94A3B8)
     ),
     SAGE_FOREST(
-        "鼠尾草深林",
+        tr("鼠尾草深林"),
         Color(0xFF0D1412), Color(0xFF15201D), Color(0xFF1E2D29),
         Color(0xFF2A3E38), Color(0xFF6B9080), Color(0xFFF1F5F3), Color(0xFF94A8A0)
     ),
     WARM_ESPRESSO(
-        "暖栗可可夜",
+        tr("暖栗可可夜"),
         Color(0xFF161210), Color(0xFF211B18), Color(0xFF2C2420),
         Color(0xFF3E332D), Color(0xFFB08968), Color(0xFFF5F0EC), Color(0xFFA89990)
     ),
     MORANDI_MIST(
-        "晨霧莫蘭迪 (淺色護眼)",
+        tr("晨霧莫蘭迪 (淺色護眼)"),
         Color(0xFFF4F1EA), Color(0xFFFFFFFF), Color(0xFFEAE5DC),
         Color(0xFFD6CFC2), Color(0xFF5B7C99), Color(0xFF1E293B), Color(0xFF64748B)
     )
@@ -93,7 +93,7 @@ fun ExtraCalendarViews(
             // 顯示選取日期所屬的一週 7 天排班卡片
             val startOfWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value % 7).toLong())
             val weekDays = (0..6).map { startOfWeek.plusDays(it.toLong()) }
-            val weekNames = listOf("週日", "週一", "週二", "週三", "週四", "週五", "週六")
+            val weekNames = listOf(tr("週日"), tr("週一"), tr("週二"), tr("週三"), tr("週四"), tr("週五"), tr("週六"))
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -101,7 +101,7 @@ fun ExtraCalendarViews(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
-                    Text("週視圖 (${weekDays.first()} ~ ${weekDays.last()})", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.textMuted)
+                    Text(tr("週視圖 ({0} ~ {1})", weekDays.first(), weekDays.last()), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.textMuted)
                 }
                 items(weekDays) { day ->
                     val ev = events.firstOrNull { it.date == day }
@@ -123,7 +123,7 @@ fun ExtraCalendarViews(
                                 Text("${day} (${weekNames[day.dayOfWeek.value % 7]})", fontSize = 12.sp, color = theme.textMuted)
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = if (ev != null) "${ev.title} · ${ev.startTime.format(timeFormatter)}-${ev.endTime.format(timeFormatter)}" else "未排班",
+                                    text = if (ev != null) "${ev.title} · ${ev.startTime.format(timeFormatter)}-${ev.endTime.format(timeFormatter)}" else tr("未排班"),
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = theme.textMain
@@ -133,7 +133,7 @@ fun ExtraCalendarViews(
                                 }
                             }
                             if (dayAlarms.isNotEmpty()) {
-                                IconText("⏰ ${dayAlarms.size}個", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
+                                IconText(tr("⏰ {0}個", dayAlarms.size), fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -150,7 +150,7 @@ fun ExtraCalendarViews(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 item {
-                    Text("日 24H 時間軸 · $selectedDate (${ev?.title ?: "無排班"})", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
+                    Text(tr("日 24H 時間軸 · {0} ({1})", selectedDate, ev?.title?.let { tr(it) } ?: tr("無排班")), fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 items((0..23).toList()) { hour ->
@@ -176,7 +176,7 @@ fun ExtraCalendarViews(
                     ) {
                         Text(String.format("%02d:00", hour), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = theme.textMuted)
                         if (isWorkingHour) {
-                            Text(ev!!.title, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ev.type.chipText())
+                            Text(tr(ev!!.title), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ev.type.chipText())
                         }
                         if (hourAlarms.isNotEmpty()) {
                             IconText("⏰ ${hourAlarms.first().triggerTime.format(timeFormatter)} ${hourAlarms.first().label}", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
@@ -195,7 +195,7 @@ fun ExtraCalendarViews(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 item {
-                    Text("${year}年 全年排班總覽 (點擊月份跳轉)", fontSize = 15.sp, fontWeight = FontWeight.Black, color = theme.textMain)
+                    Text(tr("{0}年 全年排班總覽 (點擊月份跳轉)", year), fontSize = 15.sp, fontWeight = FontWeight.Black, color = theme.textMain)
                 }
                 items((1..12).chunked(3)) { rowMonths ->
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -212,10 +212,10 @@ fun ExtraCalendarViews(
                                     .clickable { onSelectDateAndSwitchMonth(ym.atDay(1)) }
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("${m}月", fontSize = 15.sp, fontWeight = FontWeight.Black, color = theme.textMain)
+                                    Text(tr("{0}月", m), fontSize = 15.sp, fontWeight = FontWeight.Black, color = theme.textMain)
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text("班 $mCount 天", fontSize = 11.sp, color = theme.accentText)
-                                    Text("休 $oCount 天", fontSize = 11.sp, color = Color(0xFF6EE7B7).readable())
+                                    Text(tr("班 {0} 天", mCount), fontSize = 11.sp, color = theme.accentText)
+                                    Text(tr("休 {0} 天", oCount), fontSize = 11.sp, color = Color(0xFF6EE7B7).readable())
                                 }
                             }
                         }
@@ -244,9 +244,9 @@ fun GlobalSearchDialog(
     // 網頁版 searchFilterType：all / 各班別 / alarm
     var filter by remember { mutableStateOf("all") }
     val filters = listOf(
-        "all" to "全部項目", ShiftType.EARLY.name to "☀️ 早班", ShiftType.EVENING.name to "🌆 晚班",
-        ShiftType.NIGHT.name to "🌙 夜班", ShiftType.OFF.name to "🌿 休假", ShiftType.CUSTOM.name to "📌 日程",
-        "alarm" to "⏰ 鬧鐘"
+        "all" to tr("全部項目"), ShiftType.EARLY.name to tr("☀️ 早班"), ShiftType.EVENING.name to tr("🌆 晚班"),
+        ShiftType.NIGHT.name to tr("🌙 夜班"), ShiftType.OFF.name to tr("🌿 休假"), ShiftType.CUSTOM.name to tr("📌 日程"),
+        "alarm" to tr("⏰ 鬧鐘")
     )
     val q = query.trim()
     val idle = q.isBlank() && filter == "all"
@@ -291,16 +291,16 @@ fun GlobalSearchDialog(
     MotionAlertDialog(
         onDismissRequest = onDismiss,
         containerColor = theme.bgCard,
-        title = { Text("搜尋排班日程與鬧鐘", fontSize = 15.sp, fontWeight = FontWeight.Black, color = theme.textMain) },
+        title = { Text(tr("搜尋排班日程與鬧鐘"), fontSize = 15.sp, fontWeight = FontWeight.Black, color = theme.textMain) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    placeholder = { Text("輸入班別名稱、日期 (如 11-18)、備註關鍵字...", fontSize = 12.sp) },
+                    placeholder = { Text(tr("輸入班別名稱、日期 (如 11-18)、備註關鍵字..."), fontSize = 12.sp) },
                     singleLine = true,
                     trailingIcon = if (query.isNotEmpty()) {
-                        { Icon(Tabler.X, contentDescription = "清除", tint = theme.textMuted, modifier = Modifier.clip(CircleShape).clickable { query = "" }.padding(8.dp).size(16.dp)) }
+                        { Icon(Tabler.X, contentDescription = tr("清除"), tint = theme.textMuted, modifier = Modifier.clip(CircleShape).clickable { query = "" }.padding(8.dp).size(16.dp)) }
                     } else null,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -319,7 +319,7 @@ fun GlobalSearchDialog(
                     }
                 }
                 Text(
-                    if (idle) "輸入關鍵字或點選上方分類開始搜尋" else "找到 ${matchedEvents.size + matchedAlarms.size} 筆結果",
+                    if (idle) tr("輸入關鍵字或點選上方分類開始搜尋") else tr("找到 {0} 筆結果", matchedEvents.size + matchedAlarms.size),
                     fontSize = 11.sp, color = theme.textMuted
                 )
                 LazyColumn(modifier = Modifier.heightIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -346,11 +346,11 @@ fun GlobalSearchDialog(
                             }
                             if (onEditDate != null) {
                                 Text(
-                                    "編輯", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.accent,
+                                    tr("編輯"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.accent,
                                     modifier = Modifier.clickable { onEditDate(ev.date); onDismiss() }.padding(6.dp)
                                 )
                             }
-                            IconText("跳轉 →", fontSize = 11.sp, color = theme.textMain)
+                            IconText(tr("跳轉 →"), fontSize = 11.sp, color = theme.textMain)
                         }
                     }
                     items(matchedAlarms) { al ->
@@ -373,14 +373,14 @@ fun GlobalSearchDialog(
                                 fontSize = 11.sp, color = if (al.enabled) theme.textMain else theme.textMuted,
                                 modifier = Modifier.weight(1f)
                             )
-                            Text(if (al.enabled) "開啟" else "關閉", fontSize = 10.sp, color = theme.textMuted)
+                            Text(if (al.enabled) tr("開啟") else tr("關閉"), fontSize = 10.sp, color = theme.textMuted)
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("關閉", color = theme.accentText) }
+            TextButton(onClick = onDismiss) { Text(tr("關閉"), color = theme.accentText) }
         }
     )
 }
@@ -409,7 +409,7 @@ fun TemplateEditorDialog(
         containerColor = theme.bgCard,
         title = {
             Text(
-                text = if (initialTemplate == null) "新增自訂班別模板" else "編輯「${initialTemplate.title}」",
+                text = if (initialTemplate == null) tr("新增自訂班別模板") else tr("編輯「{0}」", tr(initialTemplate.title)),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Black,
                 color = theme.textMain
@@ -420,7 +420,7 @@ fun TemplateEditorDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("班別名稱（如：豪宅夜班、機動班）", fontSize = 11.sp) },
+                    label = { Text(tr("班別名稱（如：豪宅夜班、機動班）"), fontSize = 11.sp) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -437,21 +437,21 @@ fun TemplateEditorDialog(
                                 .padding(vertical = 6.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(t.displayName, fontSize = 11.sp, color = t.badgeText, fontWeight = FontWeight.Bold)
+                            Text(tr(t.displayName), fontSize = 11.sp, color = t.badgeText, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
                 if (selectedType != ShiftType.OFF) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(value = startHour, onValueChange = { if (it.length <= 2) startHour = it }, label = { Text("起時", fontSize = 10.sp) }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = startMin, onValueChange = { if (it.length <= 2) startMin = it }, label = { Text("起分", fontSize = 10.sp) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = startHour, onValueChange = { if (it.length <= 2) startHour = it }, label = { Text(tr("起時"), fontSize = 10.sp) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = startMin, onValueChange = { if (it.length <= 2) startMin = it }, label = { Text(tr("起分"), fontSize = 10.sp) }, modifier = Modifier.weight(1f))
                         Text("~", color = theme.textMuted)
-                        OutlinedTextField(value = endHour, onValueChange = { if (it.length <= 2) endHour = it }, label = { Text("迄時", fontSize = 10.sp) }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = endMin, onValueChange = { if (it.length <= 2) endMin = it }, label = { Text("迄分", fontSize = 10.sp) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = endHour, onValueChange = { if (it.length <= 2) endHour = it }, label = { Text(tr("迄時"), fontSize = 10.sp) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = endMin, onValueChange = { if (it.length <= 2) endMin = it }, label = { Text(tr("迄分"), fontSize = 10.sp) }, modifier = Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = wakeOffset, onValueChange = { wakeOffset = it }, label = { Text("第一段起床(班前分)", fontSize = 10.sp) }, modifier = Modifier.weight(1f))
-                        OutlinedTextField(value = leaveOffset, onValueChange = { leaveOffset = it }, label = { Text("第二段出門(班前分)", fontSize = 10.sp) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = wakeOffset, onValueChange = { wakeOffset = it }, label = { Text(tr("第一段起床(班前分)"), fontSize = 10.sp) }, modifier = Modifier.weight(1f))
+                        OutlinedTextField(value = leaveOffset, onValueChange = { leaveOffset = it }, label = { Text(tr("第二段出門(班前分)"), fontSize = 10.sp) }, modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -485,11 +485,11 @@ fun TemplateEditorDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = theme.accent)
             ) {
-                Text("儲存模板", fontWeight = FontWeight.Bold)
+                Text(tr("儲存模板"), fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = theme.textMuted) }
+            TextButton(onClick = onDismiss) { Text(tr("取消"), color = theme.textMuted) }
         }
     )
 }

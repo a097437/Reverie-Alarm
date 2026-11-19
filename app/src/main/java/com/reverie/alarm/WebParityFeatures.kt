@@ -1,7 +1,6 @@
 package com.reverie.alarm
 
 import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -86,17 +85,13 @@ import java.time.format.DateTimeFormatter
 // ============================================================================
 
 private val HM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
-private val SHIFT_TYPE_OPTIONS = listOf(
-    ShiftType.EARLY to "☀️ 早班",
-    ShiftType.EVENING to "🌆 晚班",
-    ShiftType.NIGHT to "🌙 夜班",
-    ShiftType.OFF to "🌿 休假",
-    ShiftType.CUSTOM to "📌 日程"
+private val SHIFT_TYPE_OPTIONS get() = listOf(
+    ShiftType.EARLY to tr("☀️ 早班"),
+    ShiftType.EVENING to tr("🌆 晚班"),
+    ShiftType.NIGHT to tr("🌙 夜班"),
+    ShiftType.OFF to tr("🌿 休假"),
+    ShiftType.CUSTOM to tr("📌 日程")
 )
-
-fun showTimePicker(context: Context, initial: LocalTime, onPick: (LocalTime) -> Unit) {
-    TimePickerDialog(context, { _, h, m -> onPick(LocalTime.of(h, m)) }, initial.hour, initial.minute, true).show()
-}
 
 fun showDatePicker(context: Context, initial: LocalDate, onPick: (LocalDate) -> Unit) {
     DatePickerDialog(
@@ -109,16 +104,16 @@ fun showDatePicker(context: Context, initial: LocalDate, onPick: (LocalDate) -> 
 /** 網頁版 formatCountdownDiff：距離響鈴還有多久 */
 fun formatCountdown(from: LocalDateTime, to: LocalDateTime): String {
     val mins = Duration.between(from, to).toMinutes()
-    if (mins < 0) return "⚠️ 此時間已經過去，不會響鈴"
+    if (mins < 0) return tr("⚠️ 此時間已經過去，不會響鈴")
     val d = mins / 1440
     val h = (mins % 1440) / 60
     val m = mins % 60
     val parts = buildList {
-        if (d > 0) add("$d 天")
-        if (h > 0) add("$h 小時")
-        add("$m 分鐘")
+        if (d > 0) add(tr("{0} 天", d))
+        if (h > 0) add(tr("{0} 小時", h))
+        add(tr("{0} 分鐘", m))
     }
-    return "⏳ 將於 ${parts.joinToString(" ")} 後響鈴"
+    return tr("⏳ 將於 {0} 後響鈴", parts.joinToString(" "))
 }
 
 // ---------------------------------------------------------------------------
@@ -171,7 +166,7 @@ fun ImageLightbox(images: List<ShiftAttachment>, startIndex: Int, theme: ThemePa
                     modifier = Modifier.weight(1f)
                 )
                 Icon(
-                    Tabler.X, contentDescription = "關閉", tint = Color.White,
+                    Tabler.X, contentDescription = tr("關閉"), tint = Color.White,
                     modifier = Modifier.size(28.dp).clickable { onDismiss() }
                 )
             }
@@ -189,7 +184,7 @@ fun ImageLightbox(images: List<ShiftAttachment>, startIndex: Int, theme: ThemePa
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = theme.accent),
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("以系統相簿開啟原圖", fontSize = 12.sp) }
+            ) { Text(tr("以系統相簿開啟原圖"), fontSize = 12.sp) }
         }
     }
 }
@@ -199,7 +194,14 @@ fun ImageLightbox(images: List<ShiftAttachment>, startIndex: Int, theme: ThemePa
 // ---------------------------------------------------------------------------
 @Composable
 private fun TimeField(label: String, value: LocalTime, theme: ThemePalette, modifier: Modifier = Modifier, onPick: (LocalTime) -> Unit) {
-    val context = LocalContext.current
+    var picking by remember { mutableStateOf(false) }
+    MotionHost(picking) {
+        TimeWheelDialog(
+            title = tr("修改") + label.substringBefore("（"), context = null, initial = value, theme = theme,
+            onDismiss = { picking = false },
+            onConfirm = { picking = false; onPick(it) }
+        )
+    }
     Column(modifier) {
         Text(label, fontSize = 11.sp, color = theme.textMuted)
         Spacer(Modifier.height(4.dp))
@@ -209,7 +211,7 @@ private fun TimeField(label: String, value: LocalTime, theme: ThemePalette, modi
                 .clip(RoundedCornerShape(12.dp))
                 .background(theme.bgElevated)
                 .border(1.dp, theme.borderColor, RoundedCornerShape(12.dp))
-                .clickable { showTimePicker(context, value, onPick) }
+                .clickable { picking = true }
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) { Text(value.format(HM), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = theme.textMain) }
@@ -261,7 +263,7 @@ fun MediaSection(
 ) {
     val images = attachments.filter { it.isImage }
     val files = attachments.filter { !it.isImage }
-    SubHeader("🖼️ 圖片紀錄（${images.size}）", theme, "+ 上傳圖片", onPickImage)
+    SubHeader(tr("🖼️ 圖片紀錄（{0}）", images.size), theme, tr("+ 上傳圖片"), onPickImage)
     if (images.isNotEmpty()) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             images.forEachIndexed { i, img ->
@@ -279,12 +281,12 @@ fun MediaSection(
                             .background(Color.Black.copy(alpha = 0.6f))
                             .clickable { attachments.remove(img) },
                         contentAlignment = Alignment.Center
-                    ) { Icon(Tabler.X, contentDescription = "移除圖片", tint = Color.White, modifier = Modifier.size(12.dp)) }
+                    ) { Icon(Tabler.X, contentDescription = tr("移除圖片"), tint = Color.White, modifier = Modifier.size(12.dp)) }
                 }
             }
         }
     }
-    SubHeader("📎 相關附件（${files.size}）", theme, "+ 附加檔案", onPickFile)
+    SubHeader(tr("📎 相關附件（{0}）", files.size), theme, tr("+ 附加檔案"), onPickFile)
     files.forEach { att ->
         Row(
             modifier = Modifier
@@ -298,7 +300,7 @@ fun MediaSection(
             Text(ext, fontSize = 9.sp, fontWeight = FontWeight.Black, color = theme.accentText, modifier = Modifier.width(40.dp))
             Text(att.name, fontSize = 11.sp, color = theme.textMain, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Icon(
-                Tabler.X, contentDescription = "移除附件", tint = Color(0xFFF43F5E),
+                Tabler.X, contentDescription = tr("移除附件"), tint = Color(0xFFF43F5E),
                 modifier = Modifier.size(16.dp).clickable { attachments.remove(att) }
             )
         }
@@ -351,10 +353,10 @@ fun DateEditSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("排班與兩段式鬧鐘設置", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
+            Text(tr("排班與兩段式鬧鐘設置"), fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
             Text(date.toString(), fontSize = 20.sp, fontWeight = FontWeight.Black)
 
-            Text("一鍵切換班別模板（保留備註與附件）", fontSize = 11.sp, color = theme.textMuted)
+            Text(tr("一鍵切換班別模板（保留備註與附件）"), fontSize = 11.sp, color = theme.textMuted)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 templates.forEach { tpl ->
                     Box(
@@ -363,23 +365,23 @@ fun DateEditSheet(
                             .background(tpl.type.chipBg())
                             .clickable { onApplyTemplate(tpl, note, attachments.toList()) }
                             .padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) { Text(tpl.title, color = tpl.type.chipText(), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold) }
+                    ) { Text(tr(tpl.title), color = tpl.type.chipText(), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold) }
                 }
             }
 
             OutlinedTextField(
                 value = title, onValueChange = { title = it },
-                label = { Text("班別／日程名稱", fontSize = 12.sp) },
-                placeholder = { Text("例如：早班、特休", fontSize = 12.sp) },
+                label = { Text(tr("班別／日程名稱"), fontSize = 12.sp) },
+                placeholder = { Text(tr("例如：早班、特休"), fontSize = 12.sp) },
                 singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)
             )
-            Text("班別色系", fontSize = 11.sp, color = theme.textMuted)
+            Text(tr("班別色系"), fontSize = 11.sp, color = theme.textMuted)
             ChipRow(SHIFT_TYPE_OPTIONS.map { it.first.name to it.second }, type.name, theme) { type = ShiftType.valueOf(it) }
 
             if (type != ShiftType.OFF) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TimeField("上班／開始時間", start, theme, Modifier.weight(1f)) { start = it }
-                    TimeField(if (!end.isAfter(start)) "下班／結束時間（隔日）" else "下班／結束時間", end, theme, Modifier.weight(1f)) { end = it }
+                    TimeField(tr("上班／開始時間"), start, theme, Modifier.weight(1f)) { start = it }
+                    TimeField(if (!end.isAfter(start)) tr("下班／結束時間（隔日）") else tr("下班／結束時間"), end, theme, Modifier.weight(1f)) { end = it }
                 }
             }
             Row(
@@ -391,33 +393,46 @@ fun DateEditSheet(
                     .padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("儲存時同步重設「起床 ＋ 出門」兩段式鬧鐘", fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(tr("儲存時同步重設「起床 ＋ 出門」兩段式鬧鐘"), fontSize = 12.sp, modifier = Modifier.weight(1f))
                 Checkbox(checked = syncAlarms, onCheckedChange = { syncAlarms = it }, colors = CheckboxDefaults.colors(checkedColor = theme.accent))
             }
 
             // 當日鬧鐘微調
             Surface(shape = RoundedCornerShape(14.dp), color = theme.bgElevated, border = BorderStroke(1.dp, theme.borderColor)) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SubHeader("⏰ 當日鬧鐘微調（${dayAlarms.size}）", theme, "+ 加設鬧鐘", onAddAlarm)
+                    SubHeader(tr("⏰ 當日鬧鐘微調（{0}）", dayAlarms.size), theme, tr("+ 加設鬧鐘"), onAddAlarm)
                     if (dayAlarms.isEmpty()) {
-                        Text("此日無設定鬧鐘", fontSize = 11.sp, color = theme.textMuted)
+                        Text(tr("此日無設定鬧鐘"), fontSize = 11.sp, color = theme.textMuted)
                     }
-                    val context = LocalContext.current
+                    var pickingAlarm by remember { mutableStateOf<ShiftAlarm?>(null) }
+                    var lastPicking by remember { mutableStateOf<ShiftAlarm?>(null) }
+                    pickingAlarm?.let { lastPicking = it }
+                    MotionHost(pickingAlarm != null) {
+                        lastPicking?.let { target ->
+                            androidx.compose.runtime.key(target.id) {
+                                TimeWheelDialog(
+                                    title = tr("修改鬧鐘時間"), context = target.label.substringBefore("（"), initial = target.triggerTime, theme = theme,
+                                    onDismiss = { pickingAlarm = null },
+                                    onConfirm = { pickingAlarm = null; onAlarmTimeChange(target, it) }
+                                )
+                            }
+                        }
+                    }
                     dayAlarms.forEach { al ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(al.label, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(trLabel(al.label), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
                                         al.triggerTime.format(HM), fontSize = 15.sp, fontWeight = FontWeight.Black, color = theme.accent,
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(8.dp))
                                             .border(1.dp, theme.borderColor, RoundedCornerShape(8.dp))
-                                            .clickable { showTimePicker(context, al.triggerTime) { onAlarmTimeChange(al, it) } }
+                                            .clickable { pickingAlarm = al }
                                             .padding(horizontal = 8.dp, vertical = 2.dp)
                                     )
                                     Text(
-                                        "試響", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.textMain,
+                                        tr("試響"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = theme.textMain,
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(8.dp))
                                             .background(theme.bgCard)
@@ -432,7 +447,7 @@ fun DateEditSheet(
                             )
                             Spacer(Modifier.width(6.dp))
                             Icon(
-                                Tabler.X, contentDescription = "刪除鬧鐘", tint = Color(0xFFF43F5E),
+                                Tabler.X, contentDescription = tr("刪除鬧鐘"), tint = Color(0xFFF43F5E),
                                 modifier = Modifier.size(20.dp).clickable { onAlarmDelete(al) }
                             )
                         }
@@ -441,9 +456,9 @@ fun DateEditSheet(
             }
 
             // 多行私人備註
-            IconText("📝 多行私人備註（僅本人可見）", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+            IconText(tr("📝 多行私人備註（僅本人可見）"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("【交接事項】", "【攜帶物品】", "【調班紀錄】").forEach { tag ->
+                listOf(tr("【交接事項】"), tr("【攜帶物品】"), tr("【調班紀錄】")).forEach { tag ->
                     IconText(
                         "+ ${tag.trim('【', '】')}", fontSize = 11.sp, color = theme.accent, fontWeight = FontWeight.Bold,
                         modifier = Modifier
@@ -457,7 +472,7 @@ fun DateEditSheet(
             }
             OutlinedTextField(
                 value = note, onValueChange = { note = it },
-                placeholder = { Text("輸入交接事項、備忘或調班紀錄...", fontSize = 12.sp) },
+                placeholder = { Text(tr("輸入交接事項、備忘或調班紀錄..."), fontSize = 12.sp) },
                 modifier = Modifier.fillMaxWidth(), minLines = 3, shape = RoundedCornerShape(12.dp)
             )
 
@@ -470,7 +485,7 @@ fun DateEditSheet(
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onClearDay, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
-                    Text("清除當日", color = Color(0xFFF43F5E), fontWeight = FontWeight.Bold)
+                    Text(tr("清除當日"), color = Color(0xFFF43F5E), fontWeight = FontWeight.Bold)
                 }
                 Button(
                     onClick = {
@@ -481,7 +496,7 @@ fun DateEditSheet(
                     modifier = Modifier.weight(1.5f),
                     colors = ButtonDefaults.buttonColors(containerColor = theme.accent),
                     shape = RoundedCornerShape(14.dp)
-                ) { Text("儲存變更", fontWeight = FontWeight.ExtraBold) }
+                ) { Text(tr("儲存變更"), fontWeight = FontWeight.ExtraBold) }
             }
         }
     }
@@ -529,10 +544,10 @@ fun AddAlarmSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            IconText("⏰ 新增日期鬧鐘", fontSize = 18.sp, fontWeight = FontWeight.Black)
+            IconText(tr("⏰ 新增日期鬧鐘"), fontSize = 18.sp, fontWeight = FontWeight.Black)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text("指定日曆日期", fontSize = 11.sp, color = theme.textMuted)
+                    Text(tr("指定日曆日期"), fontSize = 11.sp, color = theme.textMuted)
                     Spacer(Modifier.height(4.dp))
                     Box(
                         modifier = Modifier
@@ -545,7 +560,7 @@ fun AddAlarmSheet(
                         contentAlignment = Alignment.Center
                     ) { Text(date.toString(), fontSize = 15.sp, fontWeight = FontWeight.Bold) }
                 }
-                TimeField("響鈴時間", time, theme, Modifier.weight(1f)) { time = it }
+                TimeField(tr("響鈴時間"), time, theme, Modifier.weight(1f)) { time = it }
             }
             IconText(
                 formatCountdown(now.withSecond(0).withNano(0), LocalDateTime.of(date, time)),
@@ -553,31 +568,31 @@ fun AddAlarmSheet(
             )
             OutlinedTextField(
                 value = label, onValueChange = { label = it },
-                label = { Text("鬧鐘標籤", fontSize = 12.sp) },
-                placeholder = { Text("例如：早班強效起床、出門倒數提醒", fontSize = 12.sp) },
+                label = { Text(tr("鬧鐘標籤"), fontSize = 12.sp) },
+                placeholder = { Text(tr("例如：早班強效起床、出門倒數提醒"), fontSize = 12.sp) },
                 singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)
             )
-            Text("提醒類型", fontSize = 11.sp, color = theme.textMuted)
+            Text(tr("提醒類型"), fontSize = 11.sp, color = theme.textMuted)
             ChipRow(
-                listOf(AlarmStage.WAKE.name to "🔔 第一段：強效起床", AlarmStage.LEAVE.name to "🚪 第二段：出門倒數", AlarmStage.CUSTOM.name to "⏰ 獨立日期鬧鐘"),
+                listOf(AlarmStage.WAKE.name to tr("🔔 第一段：強效起床"), AlarmStage.LEAVE.name to tr("🚪 第二段：出門倒數"), AlarmStage.CUSTOM.name to tr("⏰ 獨立日期鬧鐘")),
                 stage.name, theme
             ) { stage = AlarmStage.valueOf(it) }
-            Text("貪睡間隔", fontSize = 11.sp, color = theme.textMuted)
-            ChipRow(listOf("5" to "5 分鐘（強力模式）", "10" to "10 分鐘", "0" to "關閉貪睡（一次起）"), snooze.toString(), theme) { snooze = it.toInt() }
-            Text("鬧鐘鈴聲（可在「兩段鬧鐘」分頁匯入手機音檔）", fontSize = 11.sp, color = theme.textMuted)
+            Text(tr("貪睡間隔"), fontSize = 11.sp, color = theme.textMuted)
+            ChipRow(listOf("5" to tr("5 分鐘（強力模式）"), "10" to tr("10 分鐘"), "0" to tr("關閉貪睡（一次起）")), snooze.toString(), theme) { snooze = it.toInt() }
+            Text(tr("鬧鐘鈴聲（可在「兩段鬧鐘」分頁匯入手機音檔）"), fontSize = 11.sp, color = theme.textMuted)
             ChipRow(ringtones.map { it.id to it.name }, effectiveRingtone?.id.orEmpty(), theme) { ringtoneId = it }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp)) {
-                    Text("取消", color = theme.textMuted)
+                    Text(tr("取消"), color = theme.textMuted)
                 }
                 Button(
                     onClick = {
                         val finalLabel = label.trim().ifBlank {
                             when (stage) {
-                                AlarmStage.WAKE -> "強效起床鬧鐘"
-                                AlarmStage.LEAVE -> "出門倒數提醒"
-                                AlarmStage.CUSTOM -> "自訂日期鬧鐘"
+                                AlarmStage.WAKE -> tr("強效起床鬧鐘")
+                                AlarmStage.LEAVE -> tr("出門倒數提醒")
+                                AlarmStage.CUSTOM -> tr("自訂日期鬧鐘")
                             }
                         }
                         onAdd(date, time, finalLabel, stage, snooze, effectiveRingtone)
@@ -586,7 +601,7 @@ fun AddAlarmSheet(
                     modifier = Modifier.weight(1.5f),
                     colors = ButtonDefaults.buttonColors(containerColor = theme.accent),
                     shape = RoundedCornerShape(14.dp)
-                ) { Text("建立日期鬧鐘", fontWeight = FontWeight.ExtraBold) }
+                ) { Text(tr("建立日期鬧鐘"), fontWeight = FontWeight.ExtraBold) }
             }
         }
     }

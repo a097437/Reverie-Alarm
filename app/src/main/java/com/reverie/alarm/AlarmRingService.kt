@@ -69,6 +69,7 @@ class AlarmRingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        I18n.ensure(applicationContext)
         when (intent?.action) {
             ACTION_START -> {
                 val spec = AlarmEngine.specFromJson(intent.getStringExtra(AlarmEngine.EXTRA_SPEC_JSON))
@@ -83,7 +84,7 @@ class AlarmRingService : Service() {
                 if (spec != null && canSnooze(spec)) {
                     val next = AlarmEngine.scheduleSnooze(this, spec)
                     val timeText = next.triggerDateTime().format(DateTimeFormatter.ofPattern("HH:mm"))
-                    Toast.makeText(this, "😴 已貪睡，$timeText 會再響（剩 ${next.remainingSnooze} 次）", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, tr("😴 已貪睡，{0} 會再響（剩 {1} 次）", timeText, next.remainingSnooze), Toast.LENGTH_LONG).show()
                 }
                 finishRinging(showToast = false)
             }
@@ -143,7 +144,7 @@ class AlarmRingService : Service() {
         val builder = NotificationCompat.Builder(this, AlarmEngine.CHANNEL_RINGING)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle("⏰ $timeText ${spec.stageLabel}")
-            .setContentText(spec.label)
+            .setContentText(trLabel(spec.label))
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -157,9 +158,9 @@ class AlarmRingService : Service() {
                 this, 3, Intent(this, AlarmRingService::class.java).apply { action = ACTION_SNOOZE },
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
-            builder.addAction(0, "貪睡 ${spec.snoozeMinutes} 分鐘", snoozePi)
+            builder.addAction(0, tr("貪睡 {0} 分鐘", spec.snoozeMinutes), snoozePi)
         }
-        builder.addAction(0, "關閉鬧鐘", dismissPi)
+        builder.addAction(0, tr("關閉鬧鐘"), dismissPi)
         return builder.build()
     }
 
@@ -236,7 +237,7 @@ class AlarmRingService : Service() {
         handler.removeCallbacks(autoStopRunnable)
         stopSoundAndVibration()
         if (showToast && currentSpec != null) {
-            Toast.makeText(this, "☀️ 鬧鐘已關閉", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, tr("☀️ 鬧鐘已關閉"), Toast.LENGTH_SHORT).show()
         }
         currentSpec = null
         // 通知響鈴畫面關閉

@@ -97,10 +97,10 @@ object CloudSync {
 
     /** Google 登入：成功回傳 null，失敗回傳給使用者看的錯誤訊息 */
     suspend fun signIn(activity: Activity): String? {
-        if (!isConfigured(activity)) return "Firebase 尚未設定（缺少 google-services.json）"
+        if (!isConfigured(activity)) return tr("Firebase 尚未設定（缺少 google-services.json）")
         val webId = webClientId(activity)
         if (webId.isBlank()) {
-            return "Google 登入尚未設定完成：請在 Firebase 啟用 Google 登入並加入 SHA-1，重新下載 google-services.json"
+            return tr("Google 登入尚未設定完成：請在 Firebase 啟用 Google 登入並加入 SHA-1，重新下載 google-services.json")
         }
         busy = true
         try {
@@ -110,20 +110,20 @@ object CloudSync {
             val result = CredentialManager.create(activity).getCredential(activity, request)
             val cred = result.credential
             if (cred !is CustomCredential || cred.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                return "登入失敗：收到不支援的憑證類型"
+                return tr("登入失敗：收到不支援的憑證類型")
             }
             val google = GoogleIdTokenCredential.createFrom(cred.data)
             auth.signInWithCredential(GoogleAuthProvider.getCredential(google.idToken, null)).await()
             return null
         } catch (e: GetCredentialCancellationException) {
             android.util.Log.w("RACloud", "signIn cancelled", e)
-            return "已取消登入"
+            return tr("已取消登入")
         } catch (e: NoCredentialException) {
             android.util.Log.w("RACloud", "signIn no credential", e)
-            return "這支手機上沒有可用的 Google 帳號，請先到系統設定新增帳號"
+            return tr("這支手機上沒有可用的 Google 帳號，請先到系統設定新增帳號")
         } catch (e: Exception) {
             android.util.Log.w("RACloud", "signIn failed", e)
-            return "登入失敗：" + (e.message ?: e.javaClass.simpleName)
+            return tr("登入失敗：") + (e.message ?: e.javaClass.simpleName)
         } finally {
             busy = false
         }
@@ -184,7 +184,7 @@ object CloudSync {
             }.getOrDefault(false)
             if (ok) return code
         }
-        error("無法產生邀請碼，請稍後再試")
+        error(tr("無法產生邀請碼，請稍後再試"))
     }
 
     /** 確保邀請碼還指向自己（重新開啟公開連結時用） */
@@ -198,8 +198,8 @@ object CloudSync {
 
     /** 開關公開連結：關閉時邀請碼立刻失效、別人讀不到你的班表 */
     suspend fun setPublicLink(enabled: Boolean): String? {
-        val u = user ?: return "請先登入"
-        val p = profile ?: return "帳號資料尚未載入"
+        val u = user ?: return tr("請先登入")
+        val p = profile ?: return tr("帳號資料尚未載入")
         return runCatching {
             db.collection("users").document(u.uid).update("publicLinkEnabled", enabled).await()
             val codeDoc = db.collection("inviteCodes").document(p.inviteCode)
@@ -207,7 +207,7 @@ object CloudSync {
             profile = p.copy(publicLinkEnabled = enabled)
             if (enabled) pendingEvents?.let { schedulePush(it) }
             null
-        }.getOrElse { "更新失敗：" + (it.message ?: "") }
+        }.getOrElse { tr("更新失敗：") + (it.message ?: "") }
     }
 
     // ------------------------------------------------------------------ 上傳我的公開班表
@@ -243,23 +243,23 @@ object CloudSync {
 
     /** 輸入對方邀請碼訂閱：成功回傳 null，失敗回傳錯誤訊息 */
     suspend fun subscribe(codeRaw: String): String? {
-        val u = user ?: return "請先登入 Google 帳號才能訂閱"
+        val u = user ?: return tr("請先登入 Google 帳號才能訂閱")
         val code = codeRaw.filter { it.isDigit() }
-        if (code.length != 6) return "請輸入 6 位數字邀請碼"
-        if (code == profile?.inviteCode) return "這是你自己的邀請碼"
+        if (code.length != 6) return tr("請輸入 6 位數字邀請碼")
+        if (code == profile?.inviteCode) return tr("這是你自己的邀請碼")
         return try {
             val snap = db.collection("inviteCodes").document(code).get().await()
-            val ownerUid = snap.getString("uid") ?: return "找不到這組邀請碼，或對方已關閉共享"
-            if (ownerUid == u.uid) return "這是你自己的邀請碼"
-            val name = snap.getString("name") ?: "親友班表"
+            val ownerUid = snap.getString("uid") ?: return tr("找不到這組邀請碼，或對方已關閉共享")
+            if (ownerUid == u.uid) return tr("這是你自己的邀請碼")
+            val name = snap.getString("name") ?: tr("親友班表")
             db.collection("users").document(u.uid).collection("subscriptions").document(ownerUid).set(
                 mapOf("name" to name, "code" to code, "addedAt" to FieldValue.serverTimestamp())
             ).await()
             null
         } catch (e: FirebaseFirestoreException) {
-            if (e.code == FirebaseFirestoreException.Code.UNAVAILABLE) "目前沒有網路，請連線後再試" else "訂閱失敗：" + e.code.name
+            if (e.code == FirebaseFirestoreException.Code.UNAVAILABLE) tr("目前沒有網路，請連線後再試") else tr("訂閱失敗：") + e.code.name
         } catch (e: Exception) {
-            "訂閱失敗：" + (e.message ?: "")
+            tr("訂閱失敗：") + (e.message ?: "")
         }
     }
 
@@ -276,7 +276,7 @@ object CloudSync {
                 if (qs == null) return@addSnapshotListener
                 val wanted = qs.documents.associate { d ->
                     d.id to PartnerSubscription(
-                        name = d.getString("name") ?: "親友班表",
+                        name = d.getString("name") ?: tr("親友班表"),
                         code = d.getString("code") ?: "",
                         shifts = subscriptions.firstOrNull { it.uid == d.id }?.shifts,
                         uid = d.id

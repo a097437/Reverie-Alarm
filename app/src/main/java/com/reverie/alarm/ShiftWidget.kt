@@ -36,7 +36,6 @@ class ShiftWidgetProvider : AppWidgetProvider() {
         private const val PREFS = "reverie_widget"
         private const val KEY_SHIFTS = "shifts"
         private val gson = Gson()
-        private val WEEK = listOf("週一", "週二", "週三", "週四", "週五", "週六", "週日")
 
         /** App 儲存資料時呼叫：保存前後 60 天的班表並刷新小工具 */
         fun saveSnapshot(context: Context, events: List<ShiftEvent>) {
@@ -64,9 +63,9 @@ class ShiftWidgetProvider : AppWidgetProvider() {
         }
 
         private fun describe(shift: WidgetShift?): String = when {
-            shift == null -> "尚未排班"
-            shift.type == ShiftType.OFF.name -> "${shift.title} · 全天休假"
-            else -> "${shift.title} · ${shift.start.take(5)} - ${shift.end.take(5)}"
+            shift == null -> tr("尚未排班")
+            shift.type == ShiftType.OFF.name -> tr("{0} · 全天休假", tr(shift.title))
+            else -> "${tr(shift.title)} · ${shift.start.take(5)} - ${shift.end.take(5)}"
         }
 
         private fun typeColor(shift: WidgetShift?): Int {
@@ -81,6 +80,7 @@ class ShiftWidgetProvider : AppWidgetProvider() {
         }
 
         private fun buildViews(context: Context): RemoteViews {
+            I18n.ensure(context)
             val today = LocalDate.now()
             val shifts = readShifts(context)
             val todayShift = shifts.firstOrNull { it.date == today.toString() }
@@ -95,24 +95,24 @@ class ShiftWidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget_shift)
             views.setTextViewText(
                 R.id.widget_date,
-                "${today.format(DateTimeFormatter.ofPattern("M/d"))} ${WEEK[today.dayOfWeek.value - 1]}"
+                "${today.format(DateTimeFormatter.ofPattern("M/d"))} ${I18n.weekday(today.dayOfWeek)}"
             )
             views.setTextViewText(R.id.widget_today, describe(todayShift))
             views.setTextColor(R.id.widget_today_dot, typeColor(todayShift))
-            views.setTextViewText(R.id.widget_tomorrow, "明日：" + describe(tomorrowShift))
+            views.setTextViewText(R.id.widget_tomorrow, tr("明日：") + describe(tomorrowShift))
 
             if (next == null) {
                 views.setTextViewText(R.id.widget_alarm_time, "--:--")
-                views.setTextViewText(R.id.widget_alarm_label, "目前沒有排定的鬧鐘")
+                views.setTextViewText(R.id.widget_alarm_label, tr("目前沒有排定的鬧鐘"))
             } else {
                 val (spec, at) = next
                 val dayWord = when (at.toLocalDate()) {
-                    today -> "今天"
-                    today.plusDays(1) -> "明天"
+                    today -> tr("今天")
+                    today.plusDays(1) -> tr("明天")
                     else -> at.toLocalDate().format(DateTimeFormatter.ofPattern("M/d"))
                 }
                 views.setTextViewText(R.id.widget_alarm_time, at.format(DateTimeFormatter.ofPattern("HH:mm")))
-                views.setTextViewText(R.id.widget_alarm_label, "$dayWord · ${spec.label}")
+                views.setTextViewText(R.id.widget_alarm_label, "$dayWord · ${trLabel(spec.label)}")
             }
 
             val open = PendingIntent.getActivity(
