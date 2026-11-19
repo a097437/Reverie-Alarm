@@ -35,3 +35,6 @@ signing.properties
 
 # ---- 圖示產生器下載快取 ----
 /tools/icons/.cache/
+
+# ---- 正式版簽名金鑰資料夾 ----
+/release/
