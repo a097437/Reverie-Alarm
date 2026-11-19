@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 鈴聲是用名稱（android.resource://…/raw/rt_xxx）播放，程式碼裡沒有 R.raw 參照；
+     告訴 release 版的資源壓縮不要把它們刪掉 -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/rt_*" />

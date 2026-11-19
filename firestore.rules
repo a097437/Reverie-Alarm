@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// Reverie Alarm 共享帳號安全規則
+// 部署：Firebase Console → Firestore Database → 規則 → 貼上整份內容 → 發布
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // 個人資料（邀請碼、公開連結開關）：只有本人能讀寫
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      // 我訂閱了誰：只有本人能讀寫
+      match /subscriptions/{ownerUid} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // 邀請碼 → 帳號：登入者只能用「完整代碼」查詢（get），不能列出全部代碼（list）
+    match /inviteCodes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && code.matches('^[0-9]{6}$')
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'name']);
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // 公開班表：只有本人能寫；對方開著公開連結時，登入者才讀得到
+    match /publicShifts/{uid} {
+      allow read: if isOwner(uid)
+        || (signedIn() && get(/databases/$(database)/documents/users/$(uid)).data.publicLinkEnabled == true);
+      allow create, update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(['name', 'days', 'updatedAt']);
+      allow delete: if isOwner(uid);
+    }
+
+    // 其他路徑一律拒絕
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

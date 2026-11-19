@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 tools/firebase/gen_firebase_values.py 從 google-services.json 產生，請勿手動修改 -->
+<resources>
+    <string name="google_app_id" translatable="false">1:242856534057:android:28baba4fdabdb6480afc38</string>
+    <string name="gcm_defaultSenderId" translatable="false">242856534057</string>
+    <string name="project_id" translatable="false">gooogle-32d67</string>
+    <string name="google_api_key" translatable="false">AIzaSyCNhCFQjYAoJMIuzaSbpGYxNgwkNvVPPho</string>
+    <string name="google_storage_bucket" translatable="false">gooogle-32d67.firebasestorage.app</string>
+    <string name="default_web_client_id" translatable="false">242856534057-6bm3njej733jgkjn2g75hl77o9n4imjn.apps.googleusercontent.com</string>
+</resources>

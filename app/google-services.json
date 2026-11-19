@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "242856534057",
+    "project_id": "gooogle-32d67",
+    "storage_bucket": "gooogle-32d67.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:242856534057:android:28baba4fdabdb6480afc38",
+        "android_client_info": {
+          "package_name": "com.reverie.alarm"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "242856534057-lc45h60ralffaki3c3fka760s0jfsjse.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.reverie.alarm",
+            "certificate_hash": "b476ed9816128a92873d5b3518ba872e2928a461"
+          }
+        },
+        {
+          "client_id": "242856534057-6bm3njej733jgkjn2g75hl77o9n4imjn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNhCFQjYAoJMIuzaSbpGYxNgwkNvVPPho"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "242856534057-6bm3njej733jgkjn2g75hl77o9n4imjn.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
