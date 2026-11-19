@@ -1070,6 +1070,19 @@ fun ReverieAlarmApp() {
     // 換分頁、換月份、換檢視模式、開啟批次模式時收起「編輯」膠囊
     LaunchedEffect(selectedTab, currentYearMonth, viewMode, batchMode) { quickCapsuleDate = null }
 
+    // 返回鍵：先收起開著的東西，再回到排班日曆，最後才離開 App
+    val backConsumes = drawerState.isOpen || batchMode || quickCapsuleDate != null ||
+        viewingOwnerCode != null || selectedTab != 0
+    androidx.activity.compose.BackHandler(enabled = backConsumes) {
+        when {
+            drawerState.isOpen -> coroutineScope.launch { drawerState.close() }
+            batchMode -> { batchMode = false; batchSelectedDates.clear() }
+            quickCapsuleDate != null -> quickCapsuleDate = null
+            viewingOwnerCode != null -> viewingOwnerCode = null
+            else -> selectedTab = 0
+        }
+    }
+
     val effectiveAccent = currentTheme.accent
     val effectiveCardBg = currentTheme.calCellBg
 
@@ -1478,7 +1491,10 @@ fun ReverieAlarmApp() {
 
                         4 -> WidgetsPreviewScreen(
                             todayShift = events.firstOrNull { it.date == today },
-                            nextAlarm = alarms.filter { it.enabled }.minByOrNull { LocalDateTime.of(it.date, it.triggerTime) },
+                            nextAlarm = LocalDateTime.now().let { now ->
+                                alarms.filter { it.enabled && LocalDateTime.of(it.date, it.triggerTime).isAfter(now) }
+                                    .minByOrNull { LocalDateTime.of(it.date, it.triggerTime) }
+                            },
                             theme = currentTheme,
                             effectiveAccent = effectiveAccent
                         )
@@ -2029,7 +2045,12 @@ fun CalendarScreen(
                         text = dayName,
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
-                        color = theme.textMuted,
+                        // 週末標題上色，一眼看出星期六、日
+                        color = when (dayName) {
+                            "日" -> ROSE.readable(4.5)
+                            "六" -> Color(0xFF3B82F6).readable(4.5)
+                            else -> theme.textMuted
+                        },
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -2317,9 +2338,13 @@ fun WidgetsPreviewScreen(todayShift: ShiftEvent?, nextAlarm: ShiftAlarm?, theme:
                     color = theme.textMain
                 )
                 Text(
-                    text = nextAlarm?.label ?: "今日無待響鬧鐘",
+                    text = when {
+                        nextAlarm == null -> "沒有待響的鬧鐘"
+                        nextAlarm.date == LocalDate.now() -> nextAlarm.label
+                        else -> "${nextAlarm.date.monthValue}/${nextAlarm.date.dayOfMonth}・${nextAlarm.label}"
+                    },
                     fontSize = 12.sp,
-                    color = Color(0xFFFCD34D),
+                    color = theme.accentText,
                     fontWeight = FontWeight.Bold
                 )
             }

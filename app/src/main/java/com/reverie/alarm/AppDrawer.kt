@@ -226,12 +226,12 @@ fun ReverieDrawerContent(
                                 .background(if (accountEmail != null) palette.accent else palette.textMuted.copy(alpha = 0.55f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(accountEmail?.take(1)?.uppercase() ?: "訪", fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color.White)
+                            Text(if (accountEmail != null) (CloudSync.user?.name?.takeIf { it.isNotBlank() } ?: accountEmail).take(1).uppercase() else "訪", fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color.White)
                         }
                         Spacer(Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                if (accountEmail != null) "Reverie 使用者" else "訪客單機模式",
+                                if (accountEmail != null) (CloudSync.user?.name?.takeIf { it.isNotBlank() } ?: "Reverie 使用者") else "訪客單機模式",
                                 fontSize = 14.sp, fontWeight = FontWeight.Black, color = palette.textMain
                             )
                             Text(

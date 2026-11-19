@@ -1,5 +1,6 @@
 package com.reverie.alarm
 
+import androidx.compose.ui.draw.alpha
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import android.content.Intent
@@ -278,7 +279,7 @@ fun WebTextField(value: String, placeholder: String, theme: ThemePalette, modifi
     }
 }
 
-private fun formatHm(t: LocalTime) = "${t.hour}:${t.minute.toString().padStart(2, '0')}"
+private fun formatHm(t: LocalTime) = "${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}"
 
 // ---------------------------------------------------------------------------
 // 頂部列：☰  ‹ 2026年 11月 [今] ›          [⚡]  [⋮]
@@ -549,6 +550,9 @@ fun WebAlarmsScreen(
     val sorted = alarms.sortedWith(compareBy({ it.date }, { it.triggerTime }))
     val groups = sorted.groupBy { it.date }
     val today = LocalDate.now()
+    val upcomingGroups = groups.filterKeys { it >= today }.toList()
+    val pastGroups = groups.filterKeys { it < today }.toList().reversed()
+    var showPast by remember { mutableStateOf(false) }
     val weekNames = listOf("週一", "週二", "週三", "週四", "週五", "週六", "週日")
 
     LazyColumn(
@@ -560,10 +564,7 @@ fun WebAlarmsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("兩段式日期鬧鐘清單", fontSize = 17.sp, fontWeight = FontWeight.Black, color = theme.textMain)
-                        Text("僅在指定「年/月/日」觸發，避免無效重複響鈴", fontSize = 11.sp, color = theme.textMuted)
-                    }
+                    Text("兩段式日期鬧鐘清單", fontSize = 17.sp, fontWeight = FontWeight.Black, color = theme.textMain, modifier = Modifier.weight(1f))
                     if (sorted.isNotEmpty()) {
                         WebButton(if (selectMode) "完成" else "多選刪除", theme, filled = false, radius = 16.dp, vertical = 10.dp) {
                             selectMode = !selectMode
@@ -575,6 +576,7 @@ fun WebAlarmsScreen(
                         WebButton("+ 新增鬧鐘", theme, radius = 16.dp, vertical = 10.dp, onClick = onAddAlarm)
                     }
                 }
+                Text("僅在指定「年/月/日」觸發，避免無效重複響鈴", fontSize = 11.sp, color = theme.textMuted, modifier = Modifier.padding(top = 0.dp))
                 if (selectMode && sorted.isNotEmpty()) {
                     WebCard(theme, elevated = true, radius = 16.dp, padding = 10.dp) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -615,8 +617,28 @@ fun WebAlarmsScreen(
             }
         }
 
-        groups.forEach { (date, items) ->
+        listOf(upcomingGroups, if (showPast) pastGroups else emptyList()).forEachIndexed { section, sectionGroups ->
+          if (section == 1 && pastGroups.isNotEmpty()) {
+            item(key = "past-toggle") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { showPast = !showPast }
+                        .padding(horizontal = 6.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        "已過去的鬧鐘（${pastGroups.size} 天）",
+                        fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = theme.textMuted, modifier = Modifier.weight(1f)
+                    )
+                    Text(if (showPast) "收起 ▲" else "展開 ▼", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = theme.accentText)
+                }
+            }
+          }
+          sectionGroups.forEach { (date, items) ->
             item(key = "group-$date") {
+              Box(Modifier.alpha(if (date < today) 0.6f else 1f)) {
                 val dayShift = events.firstOrNull { it.date == date }
                 val isToday = date == today
                 val allGroupSelected = items.all { selected.contains(it.id) }
@@ -638,7 +660,7 @@ fun WebAlarmsScreen(
                             if (isToday) { Spacer(Modifier.width(6.dp)); WebPill("今天", EMERALD) }
                             if (date == today.plusDays(1)) { Spacer(Modifier.width(6.dp)); WebPill("明天", AMBER) }
                             if (dayShift?.type == ShiftType.OFF) { Spacer(Modifier.width(6.dp)); WebPill("休假日", EMERALD) }
-                            if (dayShift != null) {
+                            if (dayShift != null && dayShift.type != ShiftType.OFF) {
                                 Spacer(Modifier.width(6.dp))
                                 Text(
                                     "· ${dayShift.title}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.textMain.copy(alpha = 0.85f),
@@ -656,6 +678,7 @@ fun WebAlarmsScreen(
                                     }.padding(6.dp)
                                 )
                             } else {
+                                Spacer(Modifier.width(6.dp))
                                 Text("${items.size} 個", fontSize = 12.sp, color = theme.textMuted, softWrap = false)
                                 Spacer(Modifier.width(8.dp))
                                 Row(
@@ -685,7 +708,9 @@ fun WebAlarmsScreen(
                         }
                     }
                 }
+              }
             }
+          }
         }
 
         // 鈴聲庫（網頁版放在同一分頁）
@@ -827,7 +852,7 @@ private fun AlarmItemCard(
                     Spacer(Modifier.width(6.dp))
                     WebPill(stageText, stageColor, fontSize = 9.sp)
                 }
-                Text(al.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.textMain.copy(alpha = alpha), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(al.label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.textMain.copy(alpha = alpha), maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
             }
             if (selectMode) {
                 WebButton("刪除", theme, color = ROSE.readable(), icon = Icons.Outlined.Delete, fontSize = 11.sp, vertical = 6.dp, radius = 12.dp, onClick = onDelete)
@@ -1164,11 +1189,6 @@ fun WebSharingScreen(
                                 }
                             }
                         }
-                        Text(
-                            "☁️ 公開班表會自動同步到雲端。私人備註、圖片、附件與鬧鐘只存在這支手機，不會上傳。",
-                            fontSize = 12.sp, fontWeight = FontWeight.Bold, color = EMERALD.readable(), lineHeight = 18.sp,
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(EMERALD.copy(alpha = 0.10f)).padding(10.dp)
-                        )
                     } else {
                         Text(
                             "目前以單機模式運行，所有排班與鬧鐘資料都儲存在本機。登入 Google 帳號後會產生專屬邀請碼，可以把「公開班表」分享給家人與伴侶，也能訂閱對方的班表。",
