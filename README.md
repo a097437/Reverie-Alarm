@@ -28,7 +28,7 @@
 
 ---
 
-### 📱 Android 原生版（Kotlin + Jetpack Compose）
+###  Android 原生版（Kotlin + Jetpack Compose）
 
 本儲存庫同時包含網頁版（`index.html`，PWA）與 Android 原生版原始碼（`app/`）。
 
