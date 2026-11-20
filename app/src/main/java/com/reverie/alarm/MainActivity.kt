@@ -415,6 +415,11 @@ fun ReverieAlarmApp() {
 
     var themePreset by remember { mutableStateOf(MorandiTheme.SLATE_NIGHT) }
     var appPrefs by remember { mutableStateOf(AppPreferences()) }
+    // 檢查更新：等資料載入、畫面穩定後再查（一天最多一次）
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(2500)
+        UpdateChecker.checkOnLaunch(context.applicationContext, appPrefs.autoCheckUpdate)
+    }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     val currentTheme = buildThemePalette(appPrefs, systemDark)
     SideEffect {
@@ -1701,6 +1706,11 @@ fun ReverieAlarmApp() {
                 onExportLogs = { exportLogLauncher.launch("ReverieAlarm_Logs_${today}.txt") },
                 onDismiss = { showAboutSheet = false }
             )
+        }
+
+        // 有新版本
+        MotionHost(UpdateChecker.available != null) {
+            UpdateChecker.available?.let { UpdateDialog(it, currentTheme, context) }
         }
 
         // 休假日鬧鐘防呆

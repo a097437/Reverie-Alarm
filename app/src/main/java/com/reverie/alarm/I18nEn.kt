@@ -432,6 +432,17 @@ object I18nEn {
         "兩段鬧鐘清單、班別模板、桌面小工具頁面全面改版，時間改用滾輪選擇" to "Redesigned alarm list, shift templates and widget page, with a wheel time picker",
         "修正桌面小工具「載入時出現問題」" to "Fixed the home screen widget failing to load",
 
+        // ---------------- 檢查更新 ----------------
+        "無法開啟下載連結" to "Couldn't open the download link",
+        "🎉 有新版本 {0}" to "🎉 New version {0}",
+        "目前使用 {0}" to "You have {0}",
+        "直接覆蓋安裝就好，班表、鬧鐘與設定都會保留。" to "Just install over the current app. Your shifts, alarms and settings are kept.",
+        "略過這一版" to "Skip this version",
+        "下載更新" to "Download",
+        "⚠️ 無法檢查更新，請確認網路連線" to "⚠️ Couldn't check for updates. Check your connection",
+        "檢查中…" to "Checking…",
+        "有新版本 {0}" to "Update {0}",
+
         // ---------------- 時間選擇 ----------------
         "時" to "Hr",
         "分" to "Min",

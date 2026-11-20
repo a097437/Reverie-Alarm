@@ -480,12 +480,17 @@ fun ReverieDrawerContent(
                         }
                         Text(if (autoCheckUpdate) tr("自動檢查更新已開啟") else tr("手動檢查更新模式"), fontSize = 12.sp, color = palette.textMuted)
                     }
+                    // 有新版本：點一下直接跳出更新視窗；否則顯示目前版本狀態
+                    val newer = UpdateChecker.newer
                     Text(
-                        tr("最新版本"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain,
+                        if (newer != null) tr("有新版本 {0}", newer.version) else tr("最新版本"),
+                        fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
+                        color = if (newer != null) Color.White else palette.textMain,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .background(palette.bgElevated)
-                            .border(1.dp, palette.borderColor, RoundedCornerShape(50))
+                            .background(if (newer != null) palette.accent.darkenForWhiteText() else palette.bgElevated)
+                            .border(1.dp, if (newer != null) Color.Transparent else palette.borderColor, RoundedCornerShape(50))
+                            .clickable(enabled = newer != null) { UpdateChecker.available = newer }
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -796,6 +797,9 @@ fun AboutAppSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val updateScope = androidx.compose.runtime.rememberCoroutineScope()
+    // 檢查結果直接寫在按鈕下面（面板是獨立視窗，提示氣泡會被蓋住）
+    var updateResult by remember { mutableStateOf<String?>(null) }
     BottomPanel(palette = palette, heightFraction = 0.82f, onDismiss = onDismiss) {
         PanelHeader(tr("ℹ️ 關於 Reverie Alarm 應用"), tr("版本資訊、自動檢查更新與日誌紀錄"), tr("關閉"), palette, onDismiss)
         Column(
@@ -859,13 +863,27 @@ fun AboutAppSheet(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(palette.accent)
-                        .clickable {
-                            // 目前沒有線上更新伺服器：以安裝中的版本為準
-                            AppToast.show(tr("✅ 目前已是最新穩定版（{0}）", APP_VERSION))
+                        .clickable(enabled = !UpdateChecker.checking) {
+                            updateScope.launch {
+                                updateResult = null
+                                updateResult = when (UpdateChecker.checkNow(context)) {
+                                    false -> tr("✅ 目前已是最新穩定版（{0}）", APP_VERSION)
+                                    null -> tr("⚠️ 無法檢查更新，請確認網路連線")
+                                    true -> null // 跳出「有新版本」視窗
+                                }
+                            }
                         }
                         .padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
-                ) { IconText(tr("🔄 立即檢查更新（目前 {0} 穩定版）", APP_VERSION), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White) }
+                ) {
+                    IconText(
+                        if (UpdateChecker.checking) tr("檢查中…") else tr("🔄 立即檢查更新（目前 {0} 穩定版）", APP_VERSION),
+                        fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = Color.White
+                    )
+                }
+                updateResult?.let {
+                    IconText(it, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.align(Alignment.CenterHorizontally))
+                }
             }
         }
     }
