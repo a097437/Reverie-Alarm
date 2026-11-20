@@ -43,6 +43,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -78,7 +79,14 @@ import java.time.YearMonth
 //   - 沒登入：文字用手機上的快速排班解析（不上傳），照片功能提示登入
 // ============================================================================
 
-data class AiMessage(val fromUser: Boolean, val text: String, val image: ImageBitmap? = null, val isError: Boolean = false)
+data class AiMessage(
+    val fromUser: Boolean,
+    val text: String,
+    val image: ImageBitmap? = null,
+    val isError: Boolean = false,
+    /** Gemini 產生的回覆才有：可以回報不當內容（Google Play 的 AI 內容政策要求） */
+    val report: AiReportDraft? = null
+)
 
 /** 聊天內容放在分頁外面，切換分頁回來還在 */
 class AiChatState {
@@ -109,6 +117,7 @@ fun AiScheduleScreen(
     var input by remember { mutableStateOf("") }
     var photo by remember { mutableStateOf<Bitmap?>(null) }
     var attachMenu by remember { mutableStateOf(false) }
+    var reporting by remember { mutableStateOf<AiReportDraft?>(null) }
     var signingIn by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
@@ -165,16 +174,25 @@ fun AiScheduleScreen(
     }
 
     fun send() {
-        val text = input.trim()
+        val text = input.trim().take(AiGuard.MAX_INPUT_CHARS)
         val img = photo
         if ((text.isEmpty() && img == null) || state.busy) return
         if (img != null && !signedIn) { AppToast.show(tr("登入 Google 帳號後就能讓 AI 讀班表照片")); return }
+        // 每天次數、送出間隔：超過時文字改用手機上的解析，照片請使用者明天再試
+        if (signedIn) AiGuard.check(context, img != null)?.let { why ->
+            if (img != null) { AppToast.show(why); return }
+            input = ""
+            state.messages += AiMessage(true, text)
+            localParse(text, note = tr("⚠️ {0}。先改用手機上的快速排班幫你解析：", why))
+            return
+        }
         input = ""; photo = null
         state.messages += AiMessage(true, text, img?.asImageBitmap())
         if (!signedIn) { localParse(text); return }
 
         state.turns += AiTurn(true, text.ifEmpty { tr("這是我的班表，請幫我整理我的班。") }, img)
         state.busy = true
+        AiGuard.record(context, img != null)
         scope.launch {
             try {
                 val system = AiSchedule.systemPrompt(templates, LocalDate.now(), baseMonth, user?.name, AiPrefs.rosterName(context))
@@ -185,8 +203,9 @@ fun AiScheduleScreen(
                 val unmatched = r.days.filter { (_, s) -> matchTemplate(s) == null }
                 val extra = if (unmatched.isEmpty()) "" else
                     tr("\n・對不上班別、不會套用：") + unmatched.entries.joinToString("、") { (d, s) -> "${d.monthValue}/${d.dayOfMonth}「$s」" }
-                state.messages += AiMessage(false, r.reply + extra)
+                state.messages += AiMessage(false, r.reply + extra, report = AiReportDraft(prompt = text, reply = r.reply))
             } catch (e: AiException) {
+                AiGuard.refund(context, img != null) // 沒拿到回覆不算次數
                 state.turns.removeLastOrNull()
                 if (img == null && text.isNotEmpty()) localParse(text, note = tr("⚠️ {0}。先改用手機上的快速排班幫你解析：", e.message))
                 else {
@@ -263,7 +282,7 @@ fun AiScheduleScreen(
                     }
                 }
             }
-            items(state.messages.size) { i -> AiBubble(state.messages[i], theme) }
+            items(state.messages.size) { i -> AiBubble(state.messages[i], theme) { reporting = it } }
             if (state.busy) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 36.dp)) {
@@ -342,7 +361,7 @@ fun AiScheduleScreen(
             ) {
                 if (input.isEmpty()) Text(if (signedIn) tr("跟 AI 說要怎麼排班…") else tr("例如：21 到 25 號早班"), fontSize = 14.sp, color = theme.textMuted)
                 BasicTextField(
-                    value = input, onValueChange = { input = it }, maxLines = 5,
+                    value = input, onValueChange = { input = it.take(AiGuard.MAX_INPUT_CHARS) }, maxLines = 5,
                     textStyle = TextStyle(color = theme.textMain, fontSize = 14.sp, lineHeight = 20.sp), cursorBrush = SolidColor(theme.accent),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -358,8 +377,44 @@ fun AiScheduleScreen(
             }
         }
         Text(
-            if (signedIn) tr("AI 模式：送出的文字與照片會交給 Google Gemini 處理") else tr("目前在手機上解析，不會上傳"),
+            when {
+                !signedIn -> tr("目前在手機上解析，不會上傳")
+                input.length > AiGuard.MAX_INPUT_CHARS - 50 -> tr("{0}/{1} 字", input.length, AiGuard.MAX_INPUT_CHARS)
+                else -> tr("AI 模式：送出的文字與照片會交給 Google Gemini 處理 · 今天還能用 {0} 次", AiGuard.remaining(context))
+            },
             fontSize = 10.sp, color = theme.textMuted, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 6.dp)
+        )
+    }
+
+    // ---- 回報 AI 回覆 ----
+    var lastReport by remember { mutableStateOf<AiReportDraft?>(null) }
+    reporting?.let { lastReport = it }
+    MotionHost(reporting != null) {
+        val draft = lastReport
+        var sending by remember { mutableStateOf(false) }
+        MotionAlertDialog(
+            onDismissRequest = { if (!sending) reporting = null },
+            containerColor = theme.bgCard,
+            title = { Text(tr("回報這則 AI 回覆？"), fontWeight = FontWeight.Black, color = theme.textMain) },
+            text = {
+                Text(
+                    tr("覺得內容不當、冒犯或有問題時可以回報。會把這則 AI 回覆和你當時送出的文字（不含照片）交給開發者檢查。"),
+                    fontSize = 13.sp, color = theme.textMuted, lineHeight = 19.sp
+                )
+            },
+            confirmButton = {
+                TextButton(enabled = !sending, onClick = {
+                    if (draft == null) return@TextButton
+                    sending = true
+                    scope.launch {
+                        val err = AiReports.send(draft)
+                        sending = false
+                        reporting = null
+                        AppToast.show(err ?: tr("✅ 已回報，謝謝你"))
+                    }
+                }) { Text(if (sending) tr("回報中…") else tr("回報"), color = ROSE.readable(), fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(enabled = !sending, onClick = { reporting = null }) { Text(tr("取消"), color = theme.textMuted) } }
         )
     }
 }
@@ -374,7 +429,7 @@ private fun SuggestionChip(text: String, theme: ThemePalette, onClick: () -> Uni
 }
 
 @Composable
-private fun AiBubble(m: AiMessage, theme: ThemePalette) {
+private fun AiBubble(m: AiMessage, theme: ThemePalette, onReport: (AiReportDraft) -> Unit = {}) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (m.fromUser) Arrangement.End else Arrangement.Start, verticalAlignment = Alignment.Top) {
         if (!m.fromUser) {
             Box(Modifier.size(28.dp).clip(CircleShape).background(theme.accent.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
@@ -395,6 +450,12 @@ private fun AiBubble(m: AiMessage, theme: ThemePalette) {
                         .clip(RoundedCornerShape(18.dp))
                         .background(when { m.fromUser -> theme.accent.darkenForWhiteText(); m.isError -> ROSE.copy(alpha = 0.12f); else -> theme.bgElevated })
                         .padding(horizontal = 13.dp, vertical = 9.dp)
+                )
+            }
+            m.report?.let { r ->
+                IconText(
+                    tr("⚑ 回報"), fontSize = 11.sp, color = theme.textMuted,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onReport(r) }.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }
         }

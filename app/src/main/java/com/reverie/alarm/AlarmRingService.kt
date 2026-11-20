@@ -166,8 +166,8 @@ class AlarmRingService : Service() {
 
     private fun startSound(uriStr: String?, fadeIn: Boolean) {
         val candidates = listOfNotNull(
-            uriStr?.takeIf { it.isNotBlank() }?.let { runCatching { Uri.parse(it) }.getOrNull() },
-            Uri.parse(BuiltInRingtones.uri(this, BuiltInRingtones.WAKE_STRONG)),
+            BuiltInRingtones.resolve(this, uriStr)?.takeIf { it.isNotBlank() }?.let { runCatching { Uri.parse(it) }.getOrNull() },
+            Uri.parse(BuiltInRingtones.uri(this, BuiltInRingtones.DEFAULT_WAKE)),
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)

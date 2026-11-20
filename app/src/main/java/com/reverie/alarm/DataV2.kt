@@ -29,7 +29,7 @@ data class AlarmDto(
     val label: String = "",
     val enabled: Boolean = true,
     val ringtoneUri: String? = null,
-    val ringtoneName: String = "強效雙音階喚醒",
+    val ringtoneName: String = "晨空漫步",
     val maxSnoozeCount: Int = 2,
     val snoozeMinutes: Int = 5
 )

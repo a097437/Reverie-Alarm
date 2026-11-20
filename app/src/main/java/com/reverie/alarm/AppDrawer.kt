@@ -400,7 +400,7 @@ fun ReverieDrawerContent(
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 // 共享帳號（原本的底部分頁，收進側邊欄）
                 val cloudUser = CloudSync.user
-                val invite = CloudSync.profile?.takeIf { it.publicLinkEnabled }?.inviteCode
+                val invite = CloudSync.profile?.takeIf { it.publicLinkEnabled }?.inviteCode?.let { CloudSync.displayCode(it) }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

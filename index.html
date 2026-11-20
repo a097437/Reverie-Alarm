@@ -952,7 +952,7 @@
     <div id="google-login-modal" class="hidden absolute inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-5">
       <div class="theme-card border rounded-3xl p-5 w-full max-w-[360px] shadow-2xl animate-sheet-up space-y-4">
         <div class="flex items-center justify-between">
-          <span class="px-2.5 py-1 rounded-full accent-soft-box border accent-text text-[10px] font-extrabold">Google OAuth 2.0 最小權限授權</span>
+          <span class="px-2.5 py-1 rounded-full accent-soft-box border accent-text text-[10px] font-extrabold">Google 帳號登入（Firebase Authentication）</span>
           <button onclick="closeGoogleLoginModal()" class="opacity-60 hover:opacity-100 text-sm font-bold">✕</button>
         </div>
 
@@ -960,36 +960,23 @@
           <div class="w-12 h-12 rounded-2xl bg-white shadow-md border border-slate-200 mx-auto flex items-center justify-center text-xl font-black text-blue-600">
             G
           </div>
-          <h3 class="text-base font-extrabold">使用 Google 帳戶一鍵登入</h3>
+          <h3 class="text-base font-extrabold">使用 Google 帳號登入</h3>
           <p class="text-xs opacity-75 leading-relaxed">
-            僅請求<strong>名稱、Email 與頭像</strong>。登入後將自動啟動<strong>無痛本地資料合併</strong>，並將「公開班表」與「私密鬧鐘／備註附件」分表加密儲存。
+            會開啟 Google 的登入視窗，由 Google 與 Firebase 驗證身分。只取得<strong>名稱與 Email</strong>，用來分享與訂閱班表。
+            這個網頁上的排班與鬧鐘仍然只存在這個瀏覽器，不會自動上傳。
           </p>
         </div>
 
         <div class="space-y-2">
-          <button onclick="executeGoogleSignIn('Alex Chen', 'alex.chen.shift@gmail.com', 'AC')"
-            class="w-full p-3 rounded-2xl border theme-elevated hover:opacity-90 flex items-center gap-3 text-left transition-all">
-            <div class="w-9 h-9 rounded-full accent-bg-flat font-extrabold text-xs flex items-center justify-center shrink-0">AC</div>
-            <div class="min-w-0 flex-1">
-              <div class="text-xs font-extrabold truncate">Alex Chen（一鍵登入並合併）</div>
-              <div class="text-[11px] opacity-60 truncate">alex.chen.shift@gmail.com</div>
-            </div>
-            <span class="text-xs accent-text font-bold">繼續 →</span>
-          </button>
-
-          <button onclick="executeGoogleSignIn('王小明', 'ming.wang.work@gmail.com', '明')"
-            class="w-full p-3 rounded-2xl border theme-elevated hover:opacity-90 flex items-center gap-3 text-left transition-all">
-            <div class="w-9 h-9 rounded-full bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0">明</div>
-            <div class="min-w-0 flex-1">
-              <div class="text-xs font-extrabold truncate">王小明</div>
-              <div class="text-[11px] opacity-60 truncate">ming.wang.work@gmail.com</div>
-            </div>
-            <span class="text-xs accent-text font-bold">繼續 →</span>
+          <button onclick="cloudSignIn()"
+            class="w-full py-3 rounded-2xl bg-white text-slate-900 border border-slate-200 font-extrabold text-sm shadow-md flex items-center justify-center gap-2 hover:bg-slate-50 transition-all">
+            <span class="text-blue-600 font-black text-base">G</span>
+            <span>使用 Google 帳號登入</span>
           </button>
         </div>
         <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[11px] text-emerald-600 dark:text-emerald-300 flex items-start gap-1.5">
           <svg class="icon-tabler w-4 h-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.46 20.846a12 12 0 0 1 -7.96 -14.846a12 12 0 0 0 8.5 -3a12 12 0 0 0 8.5 3a12 12 0 0 1 -.09 7.06" /><path d="M15 19l2 2l4 -4" /></svg>
-          <span><strong>隱私隔離承諾：</strong>您的個人鬧鐘、多行私人備註、排班圖片與文件附件僅存於私有資料表，共享對象永遠無法讀取。</span>
+          <span><strong>隱私：</strong>分享出去的只有「日期、班別名稱與上下班時間」；鬧鐘、私人備註、圖片與附件不會上傳。</span>
         </div>
       </div>
     </div>
@@ -1010,7 +997,7 @@
         <div id="public-web-preview-body" class="flex-1 overflow-y-auto py-3 space-y-2.5 no-scrollbar"></div>
 
         <div class="pt-2.5 border-t border-slate-200/60 dark:border-appBorder flex gap-2">
-          <button onclick="copyShareLink()" class="flex-1 py-2.5 rounded-xl accent-bg-flat text-xs font-bold">複製連結傳給家人</button>
+          <button onclick="copyInviteCode()" class="flex-1 py-2.5 rounded-xl accent-bg-flat text-xs font-bold">複製邀請碼傳給家人</button>
           <button onclick="closePublicWebPreview()" class="px-4 py-2.5 rounded-xl theme-elevated border text-xs font-semibold">關閉</button>
         </div>
       </div>
@@ -1153,13 +1140,171 @@
       return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     }
 
+    /**
+     * ==========================================
+     * 安全：輸出跳脫與外部資料驗證（防 XSS）
+     *   - 文字一律經過 escapeHtml 才放進 innerHTML
+     *   - onclick 等事件參數一律經過 jsArg（先轉成 JS 字串，再做 HTML 跳脫）
+     *   - 圖片／附件網址只接受 data:image 或本機 blob:，擋掉 javascript: 等
+     *   - 匯入的備份檔、localStorage、雲端資料都先經過 sanitizeAppData 才進入 state
+     * ==========================================
+     */
     function escapeHtml(str) {
-      if (!str) return '';
+      if (str === null || str === undefined) return '';
       return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function jsArg(value) {
+      return escapeHtml(JSON.stringify(value === null || value === undefined ? '' : String(value)));
+    }
+
+    const SAFE_IMAGE_URL_RE = /^data:image\/(png|jpe?g|gif|webp|bmp|heic|heif|avif);base64,[A-Za-z0-9+/=]+$/i;
+    function safeImageUrl(url) {
+      return (typeof url === 'string' && SAFE_IMAGE_URL_RE.test(url)) ? url : '';
+    }
+
+    function safeHref(url) {
+      if (typeof url !== 'string') return '#';
+      if (/^blob:(https?:\/\/[\w.:-]+|null)\/[\w-]+$/i.test(url)) return url;
+      const m = url.match(/^data:([\w.+-]+\/[\w.+-]+)(;[\w.+=-]+)*;base64,[A-Za-z0-9+/=]+$/i);
+      if (m && !/(html|svg|xml|javascript|ecmascript)/i.test(m[1])) return url;
+      return '#';
+    }
+
+    const SAFE_ID_RE = /^[A-Za-z0-9_.:-]{1,100}$/;
+    const ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+    const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+    const HHMM_RE = /^\d{2}:\d{2}$/;
+    const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+    const SHIFT_TYPE_LIST = ['early', 'evening', 'night', 'off', 'custom'];
+
+    function cleanText(v, max) {
+      if (typeof v === 'number' && Number.isFinite(v)) return String(v).slice(0, max);
+      return typeof v === 'string' ? v.slice(0, max) : '';
+    }
+    function cleanId(v, prefix) {
+      return (typeof v === 'string' && SAFE_ID_RE.test(v)) ? v : `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    function cleanInt(v, min, max, fallback) {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
+    }
+    function cleanIso(v) { return (typeof v === 'string' && ISO_DATETIME_RE.test(v)) ? v : null; }
+
+    function sanitizeImage(img) {
+      if (!img || typeof img !== 'object') return null;
+      const dataUrl = safeImageUrl(img.dataUrl);
+      if (!dataUrl) return null;
+      return { id: cleanId(img.id, 'img'), name: cleanText(img.name, 120), dataUrl, sizeText: cleanText(img.sizeText, 20) };
+    }
+
+    function sanitizeAttachment(att) {
+      if (!att || typeof att !== 'object') return null;
+      // 附件內容本來就不會存進備份；外來的網址一律丟掉，只留名稱
+      return {
+        id: cleanId(att.id, 'att'),
+        name: cleanText(att.name, 120) || '附件',
+        mimeType: /^[\w.+-]+\/[\w.+-]+$/.test(att.mimeType || '') ? att.mimeType : 'application/octet-stream',
+        sizeText: cleanText(att.sizeText, 20)
+      };
+    }
+
+    function sanitizeEvent(ev) {
+      if (!ev || typeof ev !== 'object') return null;
+      const startISO = cleanIso(ev.startISO);
+      const endISO = cleanIso(ev.endISO);
+      if (!startISO || !endISO) return null;
+      return {
+        id: cleanId(ev.id, 'ev'),
+        title: cleanText(ev.title, 40) || '班別',
+        type: SHIFT_TYPE_LIST.includes(ev.type) ? ev.type : 'custom',
+        startISO,
+        endISO,
+        note: cleanText(ev.note, 4000),
+        images: (Array.isArray(ev.images) ? ev.images : []).slice(0, 30).map(sanitizeImage).filter(Boolean),
+        attachments: (Array.isArray(ev.attachments) ? ev.attachments : []).slice(0, 30).map(sanitizeAttachment).filter(Boolean),
+        isShared: ev.isShared !== false
+      };
+    }
+
+    function sanitizeTemplate(tpl) {
+      if (!tpl || typeof tpl !== 'object') return null;
+      return {
+        id: cleanId(tpl.id, 'tpl'),
+        title: cleanText(tpl.title, 30) || '班別',
+        type: SHIFT_TYPE_LIST.includes(tpl.type) ? tpl.type : 'custom',
+        startTime: HHMM_RE.test(tpl.startTime || '') ? tpl.startTime : '08:00',
+        endTime: HHMM_RE.test(tpl.endTime || '') ? tpl.endTime : '17:00',
+        wakeOffset: cleanInt(tpl.wakeOffset, 0, 720, 90),
+        leaveOffset: cleanInt(tpl.leaveOffset, 0, 720, 40),
+        isOff: tpl.isOff === true
+      };
+    }
+
+    function sanitizeAlarm(al) {
+      if (!al || typeof al !== 'object') return null;
+      const triggerISO = cleanIso(al.triggerISO);
+      if (!triggerISO) return null;
+      return {
+        id: cleanId(al.id, 'alm'),
+        eventId: (typeof al.eventId === 'string' && SAFE_ID_RE.test(al.eventId)) ? al.eventId : null,
+        stage: al.stage === 'leave' ? 'leave' : 'wake',
+        label: cleanText(al.label, 80) || '鬧鐘',
+        triggerISO,
+        shiftStartISO: cleanIso(al.shiftStartISO),
+        enabled: al.enabled !== false,
+        snoozeMinutes: cleanInt(al.snoozeMinutes, 1, 60, 5),
+        ringtoneId: (typeof al.ringtoneId === 'string' && SAFE_ID_RE.test(al.ringtoneId)) ? al.ringtoneId : 'rt-wake-default'
+      };
+    }
+
+    const SETTING_ENUMS = {
+      colorMode: ['dark', 'light', 'system'],
+      contrast: ['standard', 'high', 'soft'],
+      surfaceStyle: ['tinted', 'graphite', 'warm', 'crisp'],
+      fontSize: ['normal', 'large']
+    };
+
+    function sanitizeSettings(raw, defaults) {
+      const out = {};
+      if (!raw || typeof raw !== 'object') return out;
+      Object.keys(defaults).forEach(key => {
+        if (!(key in raw)) return;
+        const v = raw[key];
+        const d = defaults[key];
+        if (key === 'accentColor') { if (HEX_COLOR_RE.test(v || '')) out[key] = v; return; }
+        if (key === 'calendarCellBg') { if (v === 'theme' || HEX_COLOR_RE.test(v || '')) out[key] = v; return; }
+        if (SETTING_ENUMS[key]) { if (SETTING_ENUMS[key].includes(v)) out[key] = v; return; }
+        if (typeof d === 'boolean') { if (typeof v === 'boolean') out[key] = v; return; }
+        if (typeof d === 'number') { const n = cleanInt(v, 0, 720, null); if (n !== null) out[key] = n; return; }
+      });
+      return out;
+    }
+
+    function sanitizeHolidays(raw) {
+      const out = {};
+      if (!raw || typeof raw !== 'object') return out;
+      Object.entries(raw).slice(0, 3000).forEach(([k, v]) => {
+        if (DATE_ONLY_RE.test(k)) out[k] = cleanText(v, 40) || '休假';
+      });
+      return out;
+    }
+
+    /** 備份檔、localStorage 進來的資料：只留認得的欄位，型別、格式、長度都檢查過 */
+    function sanitizeAppData(parsed) {
+      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.events)) return null;
+      return {
+        settings: sanitizeSettings(parsed.settings, state.settings),
+        templates: Array.isArray(parsed.templates) ? parsed.templates.slice(0, 50).map(sanitizeTemplate).filter(Boolean) : null,
+        holidays: sanitizeHolidays(parsed.holidays),
+        events: parsed.events.slice(0, 5000).map(sanitizeEvent).filter(Boolean),
+        alarms: Array.isArray(parsed.alarms) ? parsed.alarms.slice(0, 10000).map(sanitizeAlarm).filter(Boolean) : null
+      };
     }
 
     const TODAY_OBJ = new Date();
@@ -1305,19 +1450,10 @@
       },
 
       authUser: null,
-      cloudMergedCount: null,
+      // 雲端狀態（由 Firebase 模組更新，只用來顯示；權限一律由 Firestore 安全規則檢查）
+      cloud: { ready: false, loadFailed: false, user: null, profile: null, readers: [], subscriptions: [], publishFromHere: false },
       viewingCalendarOwnerUid: 'me',
       holidayCompareMode: false,
-      shareSettings: {
-        publicLinkEnabled: true,
-        inviteCode: '849206',
-        authorizedViewers: [
-          { email: 'family.mom@gmail.com', name: '媽媽 (家人)', role: 'viewer', addedAt: TODAY_STR }
-        ],
-        subscribedCalendars: [
-          { uid: 'shared-partner-01', name: '伴侶・林小晴的班表', email: 'ching.lin@gmail.com', inviteCode: '392014' }
-        ]
-      },
       sharedExternalEvents: {},
 
       templates: [
@@ -1372,10 +1508,11 @@
           templates: state.templates,
           holidays: state.holidays,
           events: serializableEvents,
-          alarms: state.alarms,
-          shareSettings: state.shareSettings
+          alarms: state.alarms
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        // 有開啟「從這個瀏覽器同步共享班表」時，才把公開欄位上傳
+        if (window.RACloud) window.RACloud.schedulePublish(state.events);
       } catch (err) {
         console.debug('LocalStorage save skipped:', err);
       }
@@ -1386,15 +1523,18 @@
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return false;
         const parsed = JSON.parse(raw);
-        if (!parsed || !Array.isArray(parsed.events)) return false;
+        const clean = sanitizeAppData(parsed);
+        if (!clean) return false;
 
-        if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
-        if (parsed.appUpdate) state.appUpdate = { ...state.appUpdate, ...parsed.appUpdate };
-        if (Array.isArray(parsed.templates) && parsed.templates.length > 0) state.templates = parsed.templates;
-        if (parsed.holidays) state.holidays = parsed.holidays;
-        state.events = parsed.events;
-        if (Array.isArray(parsed.alarms)) state.alarms = parsed.alarms;
-        if (parsed.shareSettings) state.shareSettings = { ...state.shareSettings, ...parsed.shareSettings };
+        state.settings = { ...state.settings, ...clean.settings };
+        if (parsed.appUpdate && typeof parsed.appUpdate === 'object') {
+          if (typeof parsed.appUpdate.autoCheckUpdate === 'boolean') state.appUpdate.autoCheckUpdate = parsed.appUpdate.autoCheckUpdate;
+          if (typeof parsed.appUpdate.lastCheckedAt === 'string') state.appUpdate.lastCheckedAt = parsed.appUpdate.lastCheckedAt.slice(0, 30);
+        }
+        if (clean.templates && clean.templates.length > 0) state.templates = clean.templates;
+        state.holidays = clean.holidays;
+        state.events = clean.events;
+        if (clean.alarms) state.alarms = clean.alarms;
         return true;
       } catch (err) {
         return false;
@@ -1510,47 +1650,6 @@
       return !isDark;
     }
 
-    function seedPartnerSharedEvents() {
-      state.sharedExternalEvents['shared-partner-01'] = [
-        {
-          id: 'ext-ev-1',
-          ownerUid: 'shared-partner-01',
-          title: '早班',
-          type: 'early',
-          startISO: buildLocalISO(TODAY_STR, '08:30'),
-          endISO: buildLocalISO(TODAY_STR, '17:30'),
-          isShared: true
-        },
-        {
-          id: 'ext-ev-2',
-          ownerUid: 'shared-partner-01',
-          title: '休假',
-          type: 'off',
-          startISO: buildLocalISO(TOMORROW_STR, '00:00'),
-          endISO: buildLocalISO(TOMORROW_STR, '23:59'),
-          isShared: true
-        },
-        {
-          id: 'ext-ev-3',
-          ownerUid: 'shared-partner-01',
-          title: '晚班',
-          type: 'evening',
-          startISO: buildLocalISO(addDaysToDateStr(TODAY_STR, 2), '15:00'),
-          endISO: buildLocalISO(addDaysToDateStr(TODAY_STR, 2), '23:30'),
-          isShared: true
-        },
-        {
-          id: 'ext-ev-4',
-          ownerUid: 'shared-partner-01',
-          title: '休假',
-          type: 'off',
-          startISO: buildLocalISO(addDaysToDateStr(TODAY_STR, 4), '00:00'),
-          endISO: buildLocalISO(addDaysToDateStr(TODAY_STR, 4), '23:59'),
-          isShared: true
-        }
-      ];
-    }
-
     function seedInitialData() {
       const earlyTpl = state.templates[0];
       const eveningTpl = state.templates[1];
@@ -1578,7 +1677,6 @@
       createShiftFromTemplate(addDaysToDateStr(TODAY_STR, 2), eveningTpl, true);
       createShiftFromTemplate(addDaysToDateStr(TODAY_STR, 3), nightTpl, true);
       createShiftFromTemplate(addDaysToDateStr(TODAY_STR, 4), offTpl, true);
-      seedPartnerSharedEvents();
     }
 
     function createShiftFromTemplate(dateStr, tpl, silent = false, preserveOverrides = null) {
@@ -1701,7 +1799,8 @@
 
     function isCommonHolidayDate(dateStr) {
       if (!state.holidayCompareMode) return false;
-      const partnerEvents = state.sharedExternalEvents['shared-partner-01'] || [];
+      const partner = state.cloud.subscriptions[0];
+      const partnerEvents = partner ? (state.sharedExternalEvents[partner.uid] || []) : [];
       const myOff = Boolean(state.holidays[dateStr]) || state.events.some(e => e.startISO.startsWith(dateStr) && e.type === 'off');
       const partnerOff = partnerEvents.some(e => e.startISO.startsWith(dateStr) && e.type === 'off');
       return myOff && partnerOff;
@@ -1816,7 +1915,7 @@
       container.innerHTML = chips.map(ch => {
         const active = state.searchFilterType === ch.id;
         return `
-          <button type="button" onclick="setSearchFilterType('${ch.id}')"
+          <button type="button" onclick="setSearchFilterType(${jsArg(ch.id)})"
             class="px-2.5 py-1.5 rounded-full text-[11px] font-extrabold border whitespace-nowrap transition-all shrink-0 ${active ? 'accent-bg-flat border-transparent' : 'theme-elevated opacity-75 hover:opacity-100'}">
             ${ch.label}
           </button>
@@ -1986,7 +2085,7 @@
             : `${formatTimeHM(ev.startISO)} - ${isCross ? '隔日 ' : ''}${formatTimeHM(ev.endISO)}`;
 
           html += `
-            <div onclick="jumpToSearchedDate('${dateStr}', false)"
+            <div onclick="jumpToSearchedDate(${jsArg(dateStr)}, false)"
               class="p-3 rounded-2xl theme-elevated border hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer space-y-1.5">
               <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-2 min-w-0">
@@ -1998,7 +2097,7 @@
                     ${st.icon} <span>${highlightSearchMatch(ev.title, rawQ)}</span>
                   </span>
                 </div>
-                <button type="button" onclick="event.stopPropagation(); jumpToSearchedDate('${dateStr}', true);"
+                <button type="button" onclick="event.stopPropagation(); jumpToSearchedDate(${jsArg(dateStr)}, true);"
                   class="px-2 py-1 rounded-lg theme-card border text-[10px] font-extrabold accent-text shrink-0">
                   ${isReadOnly ? '詳情' : '編輯'}
                 </button>
@@ -2034,7 +2133,7 @@
           const stageLabel = al.stage === 'wake' ? '起床' : (al.stage === 'leave' ? '出門' : '獨立');
 
           html += `
-            <div onclick="jumpToSearchedDate('${dateStr}', false)"
+            <div onclick="jumpToSearchedDate(${jsArg(dateStr)}, false)"
               class="p-3 rounded-2xl theme-elevated border hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-between gap-2">
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
@@ -2186,7 +2285,7 @@
                 </div>
                 <div class="min-w-0">
                   <div class="text-xs font-extrabold truncate">${user ? escapeHtml(user.name) : '訪客單機模式'}</div>
-                  <div class="text-[10px] opacity-65 truncate">${user ? escapeHtml(user.email) : '點擊一鍵登入 Google 雲端同步'}</div>
+                  <div class="text-[10px] opacity-65 truncate">${user ? escapeHtml(user.email) : '點擊登入 Google 帳號（共享班表用）'}</div>
                 </div>
               </div>
               <span class="opacity-60 shrink-0">${ti('chevron-right', 'w-4 h-4')}</span>
@@ -2198,8 +2297,8 @@
                 <select onchange="switchCalendarOwner(this.value); renderNavDrawerContent();" aria-label="切換檢視日曆來源"
                   class="w-full appearance-none pl-3 pr-8 py-2 rounded-xl text-xs font-extrabold border theme-elevated focus:outline-none cursor-pointer">
                   <option value="me" ${state.viewingCalendarOwnerUid === 'me' ? 'selected' : ''}>📅 我的日曆（完整權限）</option>
-                  ${state.shareSettings.subscribedCalendars.map(sub => `
-                    <option value="${sub.uid}" ${state.viewingCalendarOwnerUid === sub.uid ? 'selected' : ''}>👀 ${escapeHtml(sub.name)}</option>
+                  ${state.cloud.subscriptions.map(sub => `
+                    <option value="${escapeHtml(sub.uid)}" ${state.viewingCalendarOwnerUid === sub.uid ? 'selected' : ''}>👀 ${escapeHtml(sub.name)}</option>
                   `).join('')}
                 </select>
                 <span class="opacity-60 pointer-events-none absolute right-2.5">${ti('chevron-down', 'w-4 h-4')}</span>
@@ -2228,7 +2327,7 @@
               ${viewItems.map(v => {
                 const isActive = state.mainTab === 'calendar' && state.calendarView === v.id;
                 return `
-                  <button type="button" onclick="selectCalendarViewFromDrawer('${v.id}')"
+                  <button type="button" onclick="selectCalendarViewFromDrawer(${jsArg(v.id)})"
                     class="p-2.5 rounded-2xl border text-left transition-all active:scale-95 flex flex-col justify-between gap-1 ${isActive ? 'accent-soft-box accent-ring' : 'theme-card hover:opacity-90'}">
                     <div class="flex items-center justify-between">
                       <span class="w-6 h-6 rounded-lg ${isActive ? 'accent-bg-flat' : 'theme-elevated'} flex items-center justify-center">
@@ -2552,7 +2651,7 @@
       if (readonlyBanner) {
         readonlyBanner.classList.toggle('hidden', !isReadOnly);
         if (isReadOnly) {
-          const sub = state.shareSettings.subscribedCalendars.find(s => s.uid === state.viewingCalendarOwnerUid);
+          const sub = state.cloud.subscriptions.find(s => s.uid === state.viewingCalendarOwnerUid);
           const bannerText = document.getElementById('shared-banner-text');
           if (bannerText) {
             bannerText.textContent = `正在唯讀檢視「${sub ? sub.name : '共享對象'}」（對方鬧鐘與私人備註已隱藏）`;
@@ -2733,7 +2832,7 @@
       const attachments = bucket ? (bucket.attachments || []) : [];
 
       body.innerHTML = `
-        <form onsubmit="handleSaveDateEditModal(event, '${dateStr}')" class="space-y-4">
+        <form onsubmit="handleSaveDateEditModal(event, ${jsArg(dateStr)})" class="space-y-4">
           <div class="flex items-center justify-between">
             <div>
               <div class="text-[11px] font-bold accent-text">排班與兩段式鬧鐘設置</div>
@@ -2748,7 +2847,7 @@
               ${state.templates.map(tpl => {
                 const st = SHIFT_STYLES[tpl.type] || SHIFT_STYLES.custom;
                 return `
-                  <button type="button" onclick="applyTemplateInsideDateModal('${dateStr}', '${tpl.id}')"
+                  <button type="button" onclick="applyTemplateInsideDateModal(${jsArg(dateStr)}, ${jsArg(tpl.id)})"
                     class="py-2 px-1.5 rounded-xl border text-xs font-extrabold ${st.badgeBg} truncate inline-flex items-center justify-center gap-1 active:scale-95 transition-transform">
                     ${st.icon} <span>${escapeHtml(tpl.title)}</span>
                   </button>
@@ -2795,7 +2894,7 @@
           <div class="p-3 rounded-2xl theme-elevated border space-y-2">
             <div class="flex items-center justify-between">
               <span class="text-xs font-extrabold inline-flex items-center gap-1">${ti('alarm', 'w-3.5 h-3.5 accent-text')} 當日鬧鐘微調（${dayAlarms.length}）</span>
-              <button type="button" onclick="closeDateEditModal(); openAddSheet('${dateStr}', 'alarm');" class="text-[11px] font-extrabold accent-text">+ 加設鬧鐘</button>
+              <button type="button" onclick="closeDateEditModal(); openAddSheet(${jsArg(dateStr)}, 'alarm');" class="text-[11px] font-extrabold accent-text">+ 加設鬧鐘</button>
             </div>
             ${dayAlarms.length === 0 ? `
               <div class="text-[11px] opacity-55 py-1">此日無設定鬧鐘</div>
@@ -2805,17 +2904,17 @@
                   <div class="text-xs font-bold truncate">${escapeHtml(al.label)}</div>
                   <div class="flex items-center gap-1.5 mt-1">
                     <input type="time" value="${formatTimeHM(al.triggerISO)}"
-                      onchange="updateAlarmTimeInModal('${al.id}', '${dateStr}', this.value)"
+                      onchange="updateAlarmTimeInModal(${jsArg(al.id)}, ${jsArg(dateStr)}, this.value)"
                       class="px-2 py-0.5 rounded-lg theme-elevated border text-xs font-mono font-extrabold" />
-                    <button type="button" onclick="triggerAlarmSimulation('${al.id}')" class="px-2 py-0.5 rounded-lg theme-elevated border text-[10px] font-bold">試響</button>
+                    <button type="button" onclick="triggerAlarmSimulation(${jsArg(al.id)})" class="px-2 py-0.5 rounded-lg theme-elevated border text-[10px] font-bold">試響</button>
                   </div>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                  <button type="button" onclick="toggleAlarmInModal('${al.id}', '${dateStr}')"
+                  <button type="button" onclick="toggleAlarmInModal(${jsArg(al.id)}, ${jsArg(dateStr)})"
                     class="w-10 h-5 rounded-full p-0.5 transition-colors ${al.enabled ? 'accent-bg-flat' : 'bg-slate-400 dark:bg-slate-700'}">
                     <div class="w-4 h-4 rounded-full bg-white shadow transform transition-transform ${al.enabled ? 'translate-x-5' : 'translate-x-0'}"></div>
                   </button>
-                  <button type="button" onclick="deleteAlarmInModal('${al.id}', '${dateStr}')" class="p-1 text-rose-500 text-xs font-bold">✕</button>
+                  <button type="button" onclick="deleteAlarmInModal(${jsArg(al.id)}, ${jsArg(dateStr)})" class="p-1 text-rose-500 text-xs font-bold">✕</button>
                 </div>
               </div>
             `).join('')}
@@ -2839,7 +2938,7 @@
           <div class="p-3 rounded-2xl theme-elevated border space-y-2">
             <div class="flex items-center justify-between">
               <span class="text-xs font-extrabold inline-flex items-center gap-1">${ti('photo', 'w-3.5 h-3.5 accent-text')} 圖片紀錄（${images.length}）</span>
-              <button type="button" onclick="triggerMediaPicker({ target: 'edit-modal', kind: 'image', dateStr: '${dateStr}' })"
+              <button type="button" onclick="triggerMediaPicker({ target: 'edit-modal', kind: 'image', dateStr: ${jsArg(dateStr)} })"
                 class="px-2.5 py-1 rounded-xl accent-bg-flat text-[11px] font-bold">+ 上傳圖片</button>
             </div>
             ${renderThumbnailGridHtml(images, 'edit-modal', dateStr)}
@@ -2849,7 +2948,7 @@
           <div class="p-3 rounded-2xl theme-elevated border space-y-2">
             <div class="flex items-center justify-between">
               <span class="text-xs font-extrabold inline-flex items-center gap-1">${ti('paperclip', 'w-3.5 h-3.5 accent-text')} 相關附件（${attachments.length}）</span>
-              <button type="button" onclick="triggerMediaPicker({ target: 'edit-modal', kind: 'attachment', dateStr: '${dateStr}' })"
+              <button type="button" onclick="triggerMediaPicker({ target: 'edit-modal', kind: 'attachment', dateStr: ${jsArg(dateStr)} })"
                 class="px-2.5 py-1 rounded-xl theme-card border accent-text text-[11px] font-bold">+ 附加檔案</button>
             </div>
             <div class="space-y-1.5">
@@ -2858,7 +2957,7 @@
           </div>
 
           <div class="flex gap-2 pt-1">
-            <button type="button" onclick="clearDateShiftAndAlarms('${dateStr}')" class="px-3.5 py-3 rounded-xl bg-rose-500/15 text-rose-500 text-xs font-extrabold">清除當日</button>
+            <button type="button" onclick="clearDateShiftAndAlarms(${jsArg(dateStr)})" class="px-3.5 py-3 rounded-xl bg-rose-500/15 text-rose-500 text-xs font-extrabold">清除當日</button>
             <button type="submit" class="flex-1 py-3 rounded-xl accent-bg text-sm font-extrabold">儲存變更</button>
           </div>
         </form>
@@ -2954,7 +3053,7 @@
         gridCellsHtml += `
           <div class="relative ${showFloatingCapsule ? 'z-20' : ''}">
             ${showFloatingCapsule ? `
-              <button type="button" onclick="event.stopPropagation(); openDateEditModal('${dateStr}')"
+              <button type="button" onclick="event.stopPropagation(); openDateEditModal(${jsArg(dateStr)})"
                 aria-label="${dateStr} ${capsuleLabel}"
                 class="animate-edit-capsule absolute -top-7 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-full accent-bg text-[11px] font-extrabold whitespace-nowrap shadow-xl border border-white/25 inline-flex items-center gap-1 active:scale-95 transition-transform z-30">
                 ${ti(isReadOnly ? 'eye' : 'edit', 'w-3 h-3')}
@@ -2963,7 +3062,7 @@
               </button>
             ` : ''}
 
-            <button ${isInteractivePane ? `onclick="handleDateCellClick('${dateStr}')"` : 'tabindex="-1"'}
+            <button ${isInteractivePane ? `onclick="handleDateCellClick(${jsArg(dateStr)})"` : 'tabindex="-1"'}
               class="w-full h-[76px] px-1 py-2 rounded-2xl ${extraCellClass} ${isSelected && !isBatchSelected ? 'ring-2 accent-ring' : ''} flex flex-col items-center justify-between transition-all active:scale-95 relative">
               <div class="w-full flex items-center justify-center relative">
                 <span class="${dayNumberClass}">${day}</span>
@@ -3039,12 +3138,12 @@
 
             <div class="flex items-center gap-1.5 shrink-0">
               ${(!isReadOnly && selPrimaryEv) ? `
-                <button type="button" onclick="duplicateShiftToNextDay('${selDateStr}')" title="將此日班別與鬧鐘快速複製到隔日"
+                <button type="button" onclick="duplicateShiftToNextDay(${jsArg(selDateStr)})" title="將此日班別與鬧鐘快速複製到隔日"
                   class="px-2.5 py-1.5 rounded-xl theme-elevated border hover:opacity-90 text-[11px] font-extrabold active:scale-95 transition-transform">
                   複製隔日
                 </button>
               ` : ''}
-              <button type="button" onclick="openDateEditModal('${selDateStr}')"
+              <button type="button" onclick="openDateEditModal(${jsArg(selDateStr)})"
                 class="px-3 py-1.5 rounded-xl accent-bg-flat text-xs font-extrabold active:scale-95 transition-transform">
                 ${isReadOnly ? '檢視詳情' : '編輯排班 →'}
               </button>
@@ -3072,7 +3171,7 @@
             <div class="space-y-1.5 pt-1 border-t border-slate-200/40 dark:border-appBorder/70">
               <div class="flex items-center justify-between text-[11px]">
                 <span class="font-bold opacity-65 inline-flex items-center gap-1">${ti('alarm', 'w-3.5 h-3.5 accent-text')} 當日兩段式鬧鐘（${selAlarms.length}）</span>
-                <button type="button" onclick="openAddSheet('${selDateStr}', 'alarm')" class="font-bold accent-text hover:underline">+ 新增鬧鐘</button>
+                <button type="button" onclick="openAddSheet(${jsArg(selDateStr)}, 'alarm')" class="font-bold accent-text hover:underline">+ 新增鬧鐘</button>
               </div>
               ${selAlarms.length === 0 ? `
                 <div class="text-[11px] opacity-55 py-1">此日無設定鬧鐘</div>
@@ -3083,11 +3182,11 @@
                     <span class="text-xs font-bold truncate ${al.enabled ? '' : 'opacity-55 line-through'}">${escapeHtml(al.label)}</span>
                   </div>
                   <div class="flex items-center gap-1.5 shrink-0">
-                    <button type="button" onclick="triggerAlarmSimulation('${al.id}')" title="立即試響"
+                    <button type="button" onclick="triggerAlarmSimulation(${jsArg(al.id)})" title="立即試響"
                       class="p-1.5 rounded-lg theme-card border opacity-80 hover:opacity-100">
                       ${ti('volume', 'w-3.5 h-3.5')}
                     </button>
-                    <button type="button" onclick="toggleAlarm('${al.id}')" aria-label="切換鬧鐘開關"
+                    <button type="button" onclick="toggleAlarm(${jsArg(al.id)})" aria-label="切換鬧鐘開關"
                       class="w-10 h-5 rounded-full p-0.5 transition-colors ${al.enabled ? 'accent-bg-flat' : 'bg-slate-400 dark:bg-slate-700'}">
                       <div class="w-4 h-4 rounded-full bg-white shadow transform transition-transform ${al.enabled ? 'translate-x-5' : 'translate-x-0'}"></div>
                     </button>
@@ -3202,7 +3301,7 @@
         const hasDetails = hasNote || hasImages || hasAttachments;
 
         return `
-          <div onclick="openDateEditModal('${b.eventDateStr}')"
+          <div onclick="openDateEditModal(${jsArg(b.eventDateStr)})"
                class="absolute right-2 rounded-xl p-2.5 ${st.blockBg} shadow-sm overflow-hidden flex flex-col justify-between gap-1.5 cursor-pointer transition-opacity hover:opacity-95"
                style="top: ${topPx}px; height: ${heightPx}px; left: 52px;">
             <div class="min-h-0 flex-1 overflow-y-auto no-scrollbar space-y-2">
@@ -3225,9 +3324,9 @@
                       <div class="text-[10px] font-bold opacity-75 flex items-center gap-1">${ti('photo', 'w-3 h-3')} 圖片紀錄（${b.images.length}）</div>
                       <div class="grid grid-cols-3 gap-1.5">
                         ${b.images.map((img, idx) => `
-                          <div onclick="event.stopPropagation(); openImageLightbox('edit-modal', ${idx}, '${b.eventDateStr}')"
+                          <div onclick="event.stopPropagation(); openImageLightbox('edit-modal', ${idx}, ${jsArg(b.eventDateStr)})"
                                class="aspect-square rounded-lg overflow-hidden border border-current/20 bg-black/20 shadow-xs">
-                            <img src="${img.dataUrl}" alt="${escapeHtml(img.name)}" class="w-full h-full object-cover" />
+                            <img src="${safeImageUrl(img.dataUrl)}" alt="${escapeHtml(img.name)}" class="w-full h-full object-cover" />
                           </div>
                         `).join('')}
                       </div>
@@ -3242,13 +3341,13 @@
                           const badge = getFileTypeBadge(att.name);
                           const href = att.blobUrl || att.dataUrl || '#';
                           return `
-                            <a href="${href}" target="_blank" download="${escapeHtml(att.name)}" onclick="event.stopPropagation()"
+                            <a href="${escapeHtml(safeHref(href))}" target="_blank" download="${escapeHtml(att.name)}" onclick="event.stopPropagation()"
                                class="px-2 py-1 rounded-lg bg-black/15 dark:bg-black/30 border border-current/15 flex items-center justify-between gap-1.5 text-[10px] hover:opacity-85">
                               <span class="flex items-center gap-1 min-w-0 font-semibold truncate">
                                 ${badge.icon}
                                 <span class="truncate">${escapeHtml(att.name)}</span>
                               </span>
-                              <span class="px-1.5 py-0.5 rounded bg-white/15 font-bold shrink-0">${badge.tag}</span>
+                              <span class="px-1.5 py-0.5 rounded bg-white/15 font-bold shrink-0">${escapeHtml(badge.tag)}</span>
                             </a>
                           `;
                         }).join('')}
@@ -3325,7 +3424,7 @@
         const alarms = activeAlarms.filter(al => al.triggerISO.startsWith(dStr) && al.enabled).sort((a, b) => a.triggerISO.localeCompare(b.triggerISO));
 
         colsHtml += `
-          <div onclick="openDateEditModal('${dStr}')"
+          <div onclick="openDateEditModal(${jsArg(dStr)})"
             class="p-3 rounded-2xl border ${isToday ? 'theme-card accent-ring' : 'theme-card'} flex items-center justify-between gap-3 cursor-pointer active:scale-[0.99] transition-transform">
             <div class="w-12 text-center shrink-0">
               <div class="text-[11px] font-bold opacity-60">週${weekLabels[d.getDay()]}</div>
@@ -3414,7 +3513,7 @@
       const isSelected = state.alarmSelectMode && state.selectedAlarmIds.has(al.id);
 
       return `
-        <div onclick="${state.alarmSelectMode ? `toggleAlarmSelection('${al.id}')` : ''}"
+        <div onclick="${state.alarmSelectMode ? `toggleAlarmSelection(${jsArg(al.id)})` : ''}"
           class="p-3 rounded-2xl theme-elevated border space-y-2 transition-all ${state.alarmSelectMode ? 'cursor-pointer active:scale-[0.99]' : ''} ${isSelected ? 'ring-2 accent-ring accent-soft-box' : ''} ${al.enabled ? '' : 'opacity-65'}">
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2.5 min-w-0 flex-1">
@@ -3434,16 +3533,16 @@
 
             <div class="flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">
               ${state.alarmSelectMode ? `
-                <button type="button" onclick="deleteSingleAlarm('${al.id}')" title="刪除此鬧鐘"
+                <button type="button" onclick="deleteSingleAlarm(${jsArg(al.id)})" title="刪除此鬧鐘"
                   class="px-2.5 py-1.5 rounded-xl bg-rose-500/15 text-rose-500 hover:bg-rose-500/25 border border-rose-500/30 text-[11px] font-bold inline-flex items-center gap-1">
                   ${ti('trash', 'w-3.5 h-3.5')} <span>刪除</span>
                 </button>
               ` : `
-                <button type="button" onclick="triggerAlarmSimulation('${al.id}')" title="立即試響"
+                <button type="button" onclick="triggerAlarmSimulation(${jsArg(al.id)})" title="立即試響"
                   class="px-2.5 py-1.5 rounded-xl theme-card border text-[11px] font-bold inline-flex items-center gap-1">
                   ${ti('volume', 'w-3.5 h-3.5')} <span>試響</span>
                 </button>
-                <button type="button" onclick="toggleAlarm('${al.id}')" aria-label="切換鬧鐘"
+                <button type="button" onclick="toggleAlarm(${jsArg(al.id)})" aria-label="切換鬧鐘"
                   class="w-11 h-6 rounded-full p-0.5 transition-colors ${al.enabled ? 'accent-bg-flat' : 'bg-slate-400 dark:bg-slate-700'}">
                   <div class="w-5 h-5 rounded-full bg-white shadow transform transition-transform ${al.enabled ? 'translate-x-5' : 'translate-x-0'}"></div>
                 </button>
@@ -3453,13 +3552,13 @@
 
           <div class="flex items-center gap-1.5 pt-2 border-t border-slate-200/40 dark:border-appBorder/70" onclick="event.stopPropagation()">
             <span class="text-[10px] accent-text font-bold shrink-0 inline-flex items-center gap-1">${ti('music', 'w-3 h-3')} 鈴聲：</span>
-            <select onchange="updateAlarmRingtone('${al.id}', this.value)"
+            <select onchange="updateAlarmRingtone(${jsArg(al.id)}, this.value)"
               class="flex-1 min-w-0 px-2 py-1 rounded-lg theme-card border text-[11px] font-semibold truncate">
               ${state.ringtones.map(r => `
                 <option value="${r.id}" ${rt.id === r.id ? 'selected' : ''}>${escapeHtml(r.name)}</option>
               `).join('')}
             </select>
-            <button type="button" onclick="triggerRingtoneFilePicker({ mode: 'alarm-card', alarmId: '${al.id}' })"
+            <button type="button" onclick="triggerRingtoneFilePicker({ mode: 'alarm-card', alarmId: ${jsArg(al.id)} })"
               class="px-2 py-1 rounded-lg accent-soft-box border accent-text text-[10px] font-bold shrink-0">
               + 匯入
             </button>
@@ -3551,7 +3650,7 @@
                       ${isCrossDay ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/15 text-teal-400 border border-teal-500/30">跨隔日</span>` : ''}
                     </div>
                     ${isCustomDeletable ? `
-                      <button type="button" onclick="deleteCustomTemplate('${tpl.id}')" title="刪除自訂模板"
+                      <button type="button" onclick="deleteCustomTemplate(${jsArg(tpl.id)})" title="刪除自訂模板"
                         class="text-xs opacity-60 hover:text-rose-500 px-1.5 py-1 rounded-lg transition-colors inline-flex items-center gap-1">
                         ${ti('trash', 'w-3.5 h-3.5')} <span>刪除</span>
                       </button>
@@ -3568,13 +3667,13 @@
                       <div class="theme-elevated p-2.5 rounded-xl border">
                         <label class="block text-[10px] font-bold opacity-65 mb-1">上班時間</label>
                         <input type="time" value="${tpl.startTime}"
-                          onchange="updateTemplateField('${tpl.id}', 'startTime', this.value)"
+                          onchange="updateTemplateField(${jsArg(tpl.id)}, 'startTime', this.value)"
                           class="w-full px-2.5 py-1.5 rounded-lg theme-card border text-xs font-mono font-extrabold focus:outline-none" />
                       </div>
                       <div class="theme-elevated p-2.5 rounded-xl border">
                         <label class="block text-[10px] font-bold opacity-65 mb-1">下班時間 ${isCrossDay ? '<span class="text-teal-400">(隔日)</span>' : ''}</label>
                         <input type="time" value="${tpl.endTime}"
-                          onchange="updateTemplateField('${tpl.id}', 'endTime', this.value)"
+                          onchange="updateTemplateField(${jsArg(tpl.id)}, 'endTime', this.value)"
                           class="w-full px-2.5 py-1.5 rounded-lg theme-card border text-xs font-mono font-extrabold focus:outline-none" />
                       </div>
                     </div>
@@ -3586,7 +3685,7 @@
                         </span>
                         <div class="flex items-center gap-1">
                           <input type="number" value="${tpl.wakeOffset}" min="0" max="360"
-                            onchange="updateTemplateField('${tpl.id}', 'wakeOffset', this.value)"
+                            onchange="updateTemplateField(${jsArg(tpl.id)}, 'wakeOffset', this.value)"
                             class="w-14 px-1.5 py-1 rounded-lg theme-card border text-xs font-mono font-extrabold text-rose-500 text-center focus:outline-none" />
                           <span class="text-[10px] opacity-65">分</span>
                         </div>
@@ -3597,7 +3696,7 @@
                         </span>
                         <div class="flex items-center gap-1">
                           <input type="number" value="${tpl.leaveOffset}" min="0" max="240"
-                            onchange="updateTemplateField('${tpl.id}', 'leaveOffset', this.value)"
+                            onchange="updateTemplateField(${jsArg(tpl.id)}, 'leaveOffset', this.value)"
                             class="w-14 px-1.5 py-1 rounded-lg theme-card border text-xs font-mono font-extrabold text-amber-500 text-center focus:outline-none" />
                           <span class="text-[10px] opacity-65">分</span>
                         </div>
@@ -3708,12 +3807,12 @@
                       <span class="font-semibold truncate">${escapeHtml(rt.name)}</span>
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0">
-                      <button type="button" onclick="togglePreviewRingtone('${rt.id}')"
+                      <button type="button" onclick="togglePreviewRingtone(${jsArg(rt.id)})"
                         class="px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 ${isPlaying ? 'bg-rose-600 text-white' : 'theme-card border'}">
                         ${isPlaying ? `${ti('player-stop', 'w-3 h-3')} 停止` : `${ti('player-play', 'w-3 h-3')} 試聽`}
                       </button>
                       ${rt.type === 'custom' ? `
-                        <button type="button" onclick="deleteCustomRingtone('${rt.id}')" title="移除匯入音檔"
+                        <button type="button" onclick="deleteCustomRingtone(${jsArg(rt.id)})" title="移除匯入音檔"
                           class="p-1.5 opacity-60 hover:text-rose-500">
                           ${ti('trash', 'w-3.5 h-3.5')}
                         </button>
@@ -3796,13 +3895,13 @@
 
                       <div class="flex items-center gap-1.5 shrink-0">
                         ${state.alarmSelectMode ? `
-                          <button type="button" onclick="toggleSelectGroupAlarms('${dateStr}')"
+                          <button type="button" onclick="toggleSelectGroupAlarms(${jsArg(dateStr)})"
                             class="px-2 py-1 rounded-lg theme-elevated border text-[10px] font-extrabold">
                             ${allGroupSelected ? '取消整天' : '選取整天'}
                           </button>
                         ` : `
                           <span class="text-[10px] font-bold opacity-55 mr-0.5">${items.length} 個</span>
-                          <button type="button" onclick="deleteAlarmsByDate('${dateStr}')" title="刪除此日全部鬧鐘"
+                          <button type="button" onclick="deleteAlarmsByDate(${jsArg(dateStr)})" title="刪除此日全部鬧鐘"
                             class="px-2 py-1 rounded-lg bg-rose-500/12 hover:bg-rose-500/22 text-rose-500 text-[10px] font-extrabold inline-flex items-center gap-1 transition-colors">
                             ${ti('trash', 'w-3 h-3')} <span>清空此日</span>
                           </button>
@@ -3827,78 +3926,92 @@
      */
     function renderSharingAndAccountView() {
       const user = state.authUser;
-      const shareUrl = `https://reverie-alarm.app/share/${state.shareSettings.inviteCode}`;
+      const c = state.cloud;
+      const p = c.profile;
+      const publicOn = Boolean(p && p.publicLinkEnabled);
+      const code = (p && window.RACloud) ? window.RACloud.displayCode(p.inviteCode) : '';
+      const toggle = (on, handler) => `
+        <button onclick="${handler}" class="w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${on ? 'accent-bg-flat' : 'bg-slate-400 dark:bg-slate-700'}">
+          <div class="w-5 h-5 rounded-full bg-white shadow transform transition-transform ${on ? 'translate-x-5' : 'translate-x-0'}"></div>
+        </button>`;
+
+      const accountCard = `
+        <div class="p-4 rounded-2xl theme-card border space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-extrabold uppercase tracking-wider accent-text inline-flex items-center gap-1">${ti('cloud', 'w-4 h-4')} 帳號</span>
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${user ? 'bg-emerald-500/20 text-emerald-500' : 'theme-elevated opacity-75'}">
+              ${user ? '已登入（Firebase 驗證）' : (c.loadFailed ? '雲端功能載入失敗' : '未登入')}
+            </span>
+          </div>
+          ${user ? `
+            <div class="flex items-center justify-between gap-3 p-3 rounded-xl theme-elevated border">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-10 h-10 rounded-full accent-bg-flat font-extrabold text-sm flex items-center justify-center shrink-0">${escapeHtml(user.avatarText)}</div>
+                <div class="min-w-0">
+                  <div class="text-sm font-extrabold truncate">${escapeHtml(user.name)}</div>
+                  <div class="text-[11px] opacity-65 truncate">${escapeHtml(user.email)}</div>
+                </div>
+              </div>
+              <button onclick="handleGoogleSignOut()" class="px-3 py-1.5 rounded-xl theme-card border hover:text-rose-500 text-xs font-bold shrink-0">登出</button>
+            </div>
+          ` : `
+            <p class="text-xs opacity-75 leading-relaxed">
+              排班與鬧鐘都存在這個瀏覽器。登入 Google 帳號後，可以用邀請碼把「公開班表」分享給家人與伴侶，也能訂閱對方的班表（和 Android App 共用同一個帳號）。
+            </p>
+            <button onclick="cloudSignIn()" class="w-full py-3 rounded-xl bg-white dark:bg-slate-100 text-slate-900 font-extrabold text-xs shadow-md flex items-center justify-center gap-2 hover:bg-slate-50 transition-all">
+              <span class="text-blue-600 font-black text-base">G</span>
+              <span>使用 Google 帳號登入</span>
+            </button>
+          `}
+        </div>`;
+
+      if (!user) return `<div class="p-4 space-y-4">${accountCard}</div>`;
 
       return `
         <div class="p-4 space-y-4">
-          <div class="p-4 rounded-2xl theme-card border space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-extrabold uppercase tracking-wider accent-text inline-flex items-center gap-1">${ti('cloud', 'w-4 h-4')} 帳號與雲端資料隔離</span>
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${user ? 'bg-emerald-500/20 text-emerald-500' : 'theme-elevated opacity-75'}">
-                ${user ? 'Firebase 雲端即時同步中' : '單機免登入模式'}
-              </span>
-            </div>
-
-            ${user ? `
-              <div class="flex items-center justify-between gap-3 p-3 rounded-xl theme-elevated border">
-                <div class="flex items-center gap-2.5 min-w-0">
-                  <div class="w-10 h-10 rounded-full accent-bg-flat font-extrabold text-sm flex items-center justify-center shrink-0">
-                    ${escapeHtml(user.avatarText)}
-                  </div>
-                  <div class="min-w-0">
-                    <div class="text-sm font-extrabold truncate">${escapeHtml(user.name)}</div>
-                    <div class="text-[11px] opacity-65 truncate">${escapeHtml(user.email)}</div>
-                  </div>
-                </div>
-                <button onclick="handleGoogleSignOut()" class="px-3 py-1.5 rounded-xl theme-card border hover:text-rose-500 text-xs font-bold shrink-0">
-                  登出
-                </button>
-              </div>
-              ${state.cloudMergedCount !== null ? `
-                <div class="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-300 text-[11px] font-semibold">
-                  ✅ 已無痛合併 <strong>${state.cloudMergedCount}</strong> 筆本地單機排班與鬧鐘資料至雲端！
-                </div>
-              ` : ''}
-            ` : `
-              <p class="text-xs opacity-75 leading-relaxed">
-                目前以訪客單機模式運行，所有排班與鬧鐘資料皆安全儲存在本機。登入 Google 帳號後即可產生專屬共享連結與邀請碼，將「公開班表」分享給家人與伴侶。
-              </p>
-              <button onclick="openGoogleLoginModal()" class="w-full py-3 rounded-xl bg-white dark:bg-slate-100 text-slate-900 font-extrabold text-xs shadow-md flex items-center justify-center gap-2 hover:bg-slate-50 transition-all">
-                <span class="text-blue-600 font-black text-base">G</span>
-                <span>使用 Google 帳戶一鍵登入並同步</span>
-              </button>
-            `}
-          </div>
+          ${accountCard}
 
           <div class="p-4 rounded-2xl theme-card border space-y-3">
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-2">
               <h3 class="text-xs font-extrabold uppercase tracking-wider accent-text inline-flex items-center gap-1">${ti('link', 'w-4 h-4')} 我的公開班表共享（唯讀）</h3>
-              <button onclick="togglePublicShareLink()" class="w-11 h-6 rounded-full p-0.5 transition-colors ${state.shareSettings.publicLinkEnabled ? 'accent-bg-flat' : 'bg-slate-400 dark:bg-slate-700'}">
-                <div class="w-5 h-5 rounded-full bg-white shadow transform transition-transform ${state.shareSettings.publicLinkEnabled ? 'translate-x-5' : 'translate-x-0'}"></div>
-              </button>
+              ${p ? toggle(publicOn, 'togglePublicShareLink()') : '<span class="text-[11px] opacity-60">載入中…</span>'}
             </div>
 
-            <div class="p-3 rounded-xl theme-elevated border space-y-2">
+            <div class="p-3 rounded-xl theme-elevated border space-y-2.5">
               <div class="flex items-center justify-between">
-                <span class="text-[11px] opacity-65">6 位數共享邀請碼</span>
-                <span class="text-base font-black font-mono tracking-widest accent-text">${state.shareSettings.inviteCode}</span>
+                <span class="text-[11px] opacity-65">共享邀請碼</span>
+                <span class="text-base font-black font-mono tracking-widest accent-text">${!p ? '產生中…' : (publicOn ? escapeHtml(code) : '已停用')}</span>
               </div>
-              <div class="text-[11px] font-mono opacity-65 truncate theme-card px-2.5 py-1.5 rounded-lg border">
-                ${shareUrl}
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="copyInviteCode()" class="py-2 rounded-xl accent-bg-flat text-xs font-bold ${publicOn ? '' : 'opacity-50'}">複製邀請碼</button>
+                <button onclick="openPublicWebPreview()" class="py-2 rounded-xl theme-card border text-xs font-bold">預覽對方看到的</button>
               </div>
-              <div class="grid grid-cols-2 gap-2 pt-1">
-                <button onclick="copyShareLink()" class="py-2 rounded-xl accent-bg-flat text-xs font-bold">
-                  複製共享連結
-                </button>
-                <button onclick="openPublicWebPreview()" class="py-2 rounded-xl theme-card border text-xs font-bold">
-                  預覽家人網頁視角
-                </button>
+              <div class="flex items-center justify-between gap-3 pt-1">
+                <div class="min-w-0">
+                  <div class="text-xs font-bold">用這個瀏覽器的班表更新分享內容</div>
+                  <div class="text-[10px] opacity-60 leading-snug">預設關閉，避免蓋掉手機 App 分享出去的班表</div>
+                </div>
+                ${toggle(c.publishFromHere, 'cloudTogglePublishFromHere()')}
+              </div>
+              <div class="border-t border-slate-400/20 pt-2.5 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-bold opacity-70">訂閱我的人（${c.readers.length}）</span>
+                  <button onclick="cloudRotateCode()" class="px-2.5 py-1 rounded-lg theme-card border text-[11px] font-bold">更換邀請碼</button>
+                </div>
+                ${c.readers.length === 0 ? `
+                  <div class="text-[11px] opacity-55 leading-relaxed">還沒有人訂閱。對方輸入你的邀請碼後會出現在這裡，你可以隨時移除。</div>
+                ` : c.readers.map(r => `
+                  <div class="flex items-center justify-between gap-2 text-xs">
+                    <span class="font-bold truncate">${escapeHtml(r.name)}</span>
+                    <button onclick="cloudRemoveReader(${jsArg(r.uid)}, ${jsArg(r.name)})" class="px-2 py-0.5 rounded-lg text-rose-500 font-bold shrink-0">移除</button>
+                  </div>
+                `).join('')}
               </div>
             </div>
 
             <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-[11px] text-emerald-600 dark:text-emerald-300 leading-relaxed flex items-start gap-1.5">
               <span class="mt-0.5 shrink-0">${ti('lock', 'w-4 h-4')}</span>
-              <span><strong>資料分表隔離安全規則：</strong>共享連結僅包含「日期、班別名稱與上下班時間」，您的個人鬧鐘、多行私人備註、排班圖片與文件附件完全隔離，任何人都無法檢視。</span>
+              <span><strong>存取控制：</strong>雲端只存「日期、班別名稱與上下班時間」。只有輸入過你目前的邀請碼、而且還在「訂閱我的人」名單上的人讀得到；關閉共享、更換邀請碼或移除對方後，對方立刻無法讀取。這些都由伺服器端的安全規則檢查。</span>
             </div>
           </div>
 
@@ -3911,24 +4024,31 @@
             </div>
 
             <form onsubmit="handleSubscribeInviteCode(event)" class="flex gap-2">
-              <input type="text" id="subscribe-code-input" maxlength="6" placeholder="輸入對方 6 位數邀請碼 (如 520131)"
+              <input type="text" id="subscribe-code-input" maxlength="9" autocomplete="off" placeholder="輸入對方的 8 碼邀請碼"
                 class="flex-1 px-3 py-2 rounded-xl theme-elevated border text-xs font-mono uppercase focus:outline-none" />
               <button type="submit" class="px-3.5 py-2 rounded-xl accent-bg-flat text-xs font-bold shrink-0">訂閱班表</button>
             </form>
 
             <div class="space-y-2">
-              ${state.shareSettings.subscribedCalendars.map(sub => {
+              ${c.subscriptions.length === 0 ? `
+                <div class="text-[11px] opacity-60 leading-relaxed">還沒有訂閱任何班表。請對方在 App 按「分享邀請碼」，再把代碼輸入上方。</div>
+              ` : c.subscriptions.map(sub => {
                 const isViewing = state.viewingCalendarOwnerUid === sub.uid;
+                const status = sub.unavailable ? '讀不到：對方關閉了共享或更換了邀請碼'
+                  : (sub.count === null || sub.count === undefined ? '同步中…' : `${sub.count} 天班表`);
                 return `
                   <div class="p-3 rounded-xl border ${isViewing ? 'accent-soft-box accent-ring' : 'theme-elevated'} flex items-center justify-between gap-2">
                     <div class="min-w-0">
                       <div class="text-xs font-extrabold truncate">${escapeHtml(sub.name)}</div>
-                      <div class="text-[11px] opacity-60 truncate">邀請碼：${sub.inviteCode} · 唯讀權限</div>
+                      <div class="text-[11px] truncate ${sub.unavailable ? 'text-rose-500' : 'opacity-60'}">${escapeHtml(window.RACloud ? window.RACloud.displayCode(sub.code) : sub.code)} · ${escapeHtml(status)}</div>
                     </div>
-                    <button onclick="switchCalendarOwner('${isViewing ? 'me' : sub.uid}'); switchMainTab('calendar');"
-                      class="px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 ${isViewing ? 'bg-purple-600 text-white' : 'theme-card border'}">
-                      ${isViewing ? '檢視中' : '查看日曆 →'}
-                    </button>
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button onclick="switchCalendarOwner(${jsArg(isViewing ? 'me' : sub.uid)}); switchMainTab('calendar');" ${sub.unavailable ? 'disabled' : ''}
+                        class="px-3 py-1.5 rounded-xl text-xs font-bold ${isViewing ? 'bg-purple-600 text-white' : 'theme-card border'} ${sub.unavailable ? 'opacity-40' : ''}">
+                        ${isViewing ? '檢視中' : '查看日曆 →'}
+                      </button>
+                      <button onclick="cloudUnsubscribe(${jsArg(sub.uid)}, ${jsArg(sub.name)})" title="取消訂閱" class="px-2 py-1.5 rounded-xl text-rose-500 text-xs font-bold">✕</button>
+                    </div>
                   </div>
                 `;
               }).join('')}
@@ -4022,7 +4142,6 @@
       createShiftFromTemplate(addDaysToDateStr(TODAY_STR, 2), eveningTpl, true);
       createShiftFromTemplate(addDaysToDateStr(TODAY_STR, 3), nightTpl, true);
       createShiftFromTemplate(addDaysToDateStr(TODAY_STR, 4), offTpl, true);
-      seedPartnerSharedEvents();
     }
 
     function closeSettingsModal() {
@@ -4076,7 +4195,7 @@
             <label class="block text-[11px] font-bold opacity-70 mb-1.5">色彩外觀模式</label>
             <div class="grid grid-cols-3 gap-1.5 theme-card p-1 rounded-xl border">
               ${colorModes.map(m => `
-                <button type="button" onclick="updateSetting('colorMode', '${m.id}')"
+                <button type="button" onclick="updateSetting('colorMode', ${jsArg(m.id)})"
                   class="py-2 rounded-lg text-xs font-bold transition-all ${s.colorMode === m.id ? 'accent-bg-flat' : 'opacity-70 hover:opacity-100'}">
                   ${m.label}
                 </button>
@@ -4088,7 +4207,7 @@
             <label class="block text-[11px] font-bold opacity-70 mb-1.5">對比度等級</label>
             <div class="grid grid-cols-3 gap-1.5 theme-card p-1 rounded-xl border">
               ${contrastModes.map(c => `
-                <button type="button" onclick="updateSetting('contrast', '${c.id}')"
+                <button type="button" onclick="updateSetting('contrast', ${jsArg(c.id)})"
                   class="py-1.5 rounded-lg text-xs font-bold transition-all ${s.contrast === c.id ? 'accent-bg-flat' : 'opacity-70 hover:opacity-100'}">
                   ${c.label}
                 </button>
@@ -4100,7 +4219,7 @@
             <label class="block text-[11px] font-bold opacity-70 mb-1.5">背景基底風格</label>
             <div class="grid grid-cols-2 gap-1.5">
               ${surfaceModes.map(sf => `
-                <button type="button" onclick="updateSetting('surfaceStyle', '${sf.id}')"
+                <button type="button" onclick="updateSetting('surfaceStyle', ${jsArg(sf.id)})"
                   class="py-2 px-2.5 rounded-xl border text-xs font-bold text-left transition-all ${s.surfaceStyle === sf.id ? 'accent-soft-box accent-ring accent-text' : 'theme-card opacity-80'}">
                   ${sf.label}
                 </button>
@@ -4117,7 +4236,7 @@
               ${MORANDI_SWATCHES.map(sw => {
                 const isSelected = s.accentColor.toLowerCase() === sw.hex.toLowerCase();
                 return `
-                  <button type="button" onclick="updateSetting('accentColor', '${sw.hex}')" title="${sw.name}"
+                  <button type="button" onclick="updateSetting('accentColor', ${jsArg(sw.hex)})" title="${sw.name}"
                     class="w-7 h-7 rounded-full border-2 transition-transform ${isSelected ? 'scale-115 border-white ring-2 ring-offset-1 ring-slate-400' : 'border-transparent opacity-85 hover:opacity-100'}"
                     style="background-color: ${sw.hex};"></button>
                 `;
@@ -4143,7 +4262,7 @@
               ${CALENDAR_CELL_SWATCHES.map(sw => {
                 const isSelected = (s.calendarCellBg || '').toLowerCase() === sw.hex.toLowerCase();
                 return `
-                  <button type="button" onclick="updateSetting('calendarCellBg', '${sw.hex}')" title="${sw.name}"
+                  <button type="button" onclick="updateSetting('calendarCellBg', ${jsArg(sw.hex)})" title="${sw.name}"
                     class="w-7 h-7 rounded-full border-2 transition-transform ${isSelected ? 'scale-115 border-amber-400 ring-2 ring-offset-1 ring-slate-400' : 'border-slate-400/40 opacity-90 hover:opacity-100'}"
                     style="background-color: ${sw.hex};"></button>
                 `;
@@ -4299,19 +4418,25 @@
     function handleImportBackupJson(event) {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
+      if (file.size > 30 * 1024 * 1024) {
+        showToast('⚠️ 備份檔太大（超過 30 MB）');
+        event.target.value = '';
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => {
         try {
-          const parsed = JSON.parse(reader.result);
-          if (!parsed || !Array.isArray(parsed.events)) {
+          // 備份檔可能來自別人：只留認得的欄位，每個值都檢查型別與格式
+          const clean = sanitizeAppData(JSON.parse(reader.result));
+          if (!clean) {
             showToast('⚠️ 備份檔格式不正確');
             return;
           }
-          if (parsed.settings) state.settings = { ...state.settings, ...parsed.settings };
-          if (Array.isArray(parsed.templates)) state.templates = parsed.templates;
-          if (parsed.holidays) state.holidays = parsed.holidays;
-          state.events = parsed.events;
-          if (Array.isArray(parsed.alarms)) state.alarms = parsed.alarms;
+          state.settings = { ...state.settings, ...clean.settings };
+          if (clean.templates && clean.templates.length > 0) state.templates = clean.templates;
+          state.holidays = clean.holidays;
+          state.events = clean.events;
+          if (clean.alarms) state.alarms = clean.alarms;
           applyThemeSettings();
           saveStateToLocal();
           renderSettingsModalContent();
@@ -4335,7 +4460,7 @@
       if (ext === 'pdf') return { tag: 'PDF', icon: ti('file-text', 'w-3.5 h-3.5 text-rose-500'), cls: 'bg-rose-500/20 text-rose-500 border-rose-500/30' };
       if (ext === 'doc' || ext === 'docx') return { tag: 'WORD', icon: ti('file-text', 'w-3.5 h-3.5 text-blue-500'), cls: 'bg-blue-500/20 text-blue-500 border-blue-500/30' };
       if (ext === 'xls' || ext === 'xlsx' || ext === 'csv') return { tag: 'EXCEL', icon: ti('file-spreadsheet', 'w-3.5 h-3.5 text-emerald-500'), cls: 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30' };
-      return { tag: (ext || 'FILE').toUpperCase(), icon: ti('paperclip', 'w-3.5 h-3.5 text-amber-500'), cls: 'bg-amber-500/20 text-amber-500 border-amber-500/30' };
+      return { tag: (/^[a-z0-9]{1,6}$/.test(ext) ? ext : 'FILE').toUpperCase(), icon: ti('paperclip', 'w-3.5 h-3.5 text-amber-500'), cls: 'bg-amber-500/20 text-amber-500 border-amber-500/30' };
     }
 
     function renderThumbnailGridHtml(images, sourceType, dateStr = '') {
@@ -4346,11 +4471,11 @@
         <div class="grid grid-cols-3 gap-2">
           ${images.map((img, idx) => `
             <div class="relative group aspect-square rounded-xl overflow-hidden border theme-card shadow-xs">
-              <img src="${img.dataUrl}" alt="${escapeHtml(img.name)}"
-                onclick="openImageLightbox('${sourceType}', ${idx}, '${dateStr}')"
+              <img src="${safeImageUrl(img.dataUrl)}" alt="${escapeHtml(img.name)}"
+                onclick="openImageLightbox(${jsArg(sourceType)}, ${idx}, ${jsArg(dateStr)})"
                 class="w-full h-full object-cover cursor-zoom-in hover:scale-105 transition-transform duration-200" />
               <button type="button"
-                onclick="event.stopPropagation(); removeShiftMediaItem('${sourceType}', 'image', '${img.id}', '${dateStr}')"
+                onclick="event.stopPropagation(); removeShiftMediaItem(${jsArg(sourceType)}, 'image', ${jsArg(img.id)}, ${jsArg(dateStr)})"
                 title="移除此圖片"
                 class="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/75 hover:bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center shadow">
                 ✕
@@ -4373,15 +4498,15 @@
         const href = att.blobUrl || att.dataUrl || '#';
         return `
           <div class="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl theme-card border text-xs">
-            <a href="${href}" target="_blank" download="${escapeHtml(att.name)}" class="flex items-center gap-2 min-w-0 flex-1 hover:opacity-80">
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold border ${badge.cls} shrink-0 inline-flex items-center gap-1">${badge.icon} ${badge.tag}</span>
+            <a href="${escapeHtml(safeHref(href))}" target="_blank" download="${escapeHtml(att.name)}" class="flex items-center gap-2 min-w-0 flex-1 hover:opacity-80">
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold border ${badge.cls} shrink-0 inline-flex items-center gap-1">${badge.icon} ${escapeHtml(badge.tag)}</span>
               <div class="min-w-0">
                 <div class="font-bold truncate">${escapeHtml(att.name)}</div>
                 <div class="text-[10px] opacity-55">${escapeHtml(att.sizeText || '文件附件')} · 點擊開啟／下載</div>
               </div>
             </a>
             <button type="button"
-              onclick="removeShiftMediaItem('${sourceType}', 'attachment', '${att.id}', '${dateStr}')"
+              onclick="removeShiftMediaItem(${jsArg(sourceType)}, 'attachment', ${jsArg(att.id)}, ${jsArg(dateStr)})"
               title="移除附件"
               class="px-2 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 text-[10px] font-bold shrink-0">
               移除
@@ -4573,7 +4698,7 @@
       pillsContainer.innerHTML = state.templates.map(tpl => {
         const st = SHIFT_STYLES[tpl.type] || SHIFT_STYLES.custom;
         return `
-          <button type="button" onclick="fillEventFormWithTemplate('${tpl.id}')"
+          <button type="button" onclick="fillEventFormWithTemplate(${jsArg(tpl.id)})"
             class="py-2 px-1 rounded-xl border text-xs font-bold ${st.badgeBg} truncate inline-flex items-center justify-center gap-1">
             ${st.icon} <span>${escapeHtml(tpl.title)}</span>
           </button>
@@ -5052,7 +5177,7 @@
       container.innerHTML = state.templates.map(tpl => {
         const st = SHIFT_STYLES[tpl.type] || SHIFT_STYLES.custom;
         return `
-          <button onclick="applyBatchTemplate('${tpl.id}')"
+          <button onclick="applyBatchTemplate(${jsArg(tpl.id)})"
             class="py-2 px-1 rounded-xl border text-xs font-extrabold ${st.badgeBg} truncate inline-flex items-center justify-center gap-1">
             ${st.icon} <span>${escapeHtml(tpl.title)}</span>
           </button>
@@ -5411,26 +5536,26 @@
       document.getElementById('google-login-modal').classList.add('hidden');
     }
 
-    function executeGoogleSignIn(name, email, avatarText) {
-      const localItemsCount = state.events.length + state.alarms.length;
-      state.authUser = {
-        uid: 'google-uid-' + Date.now(),
-        name,
-        email,
-        avatarText
-      };
-      state.cloudMergedCount = localItemsCount;
+    function cloudAvailable() {
+      if (window.RACloud) return true;
+      showToast(state.cloud.loadFailed ? '⚠️ 雲端功能載入失敗，請檢查網路後重新整理' : '雲端功能載入中，請稍候再試');
+      return false;
+    }
+
+    function cloudSignIn() {
+      if (!cloudAvailable()) return;
       closeGoogleLoginModal();
-      renderApp();
-      showToast(`☁️ 歡迎 ${name}！已完成 Google 登入並無痛合併 ${localItemsCount} 筆本地資料`);
+      // 要在點擊的同一個事件裡開啟登入視窗，瀏覽器才不會擋
+      window.RACloud.signIn().then(err => showToast(err || '☁️ 已登入 Google 帳號'));
     }
 
     function handleGoogleSignOut() {
-      state.authUser = null;
-      state.cloudMergedCount = null;
-      state.viewingCalendarOwnerUid = 'me';
-      renderApp();
-      showToast('已登出 Google 帳號，目前切換為單機本機模式');
+      if (!cloudAvailable()) return;
+      window.RACloud.signOut().then(() => {
+        state.viewingCalendarOwnerUid = 'me';
+        renderApp();
+        showToast('已登出 Google 帳號（本機資料都還在）');
+      });
     }
 
     function switchCalendarOwner(ownerUid) {
@@ -5442,7 +5567,7 @@
       }
       renderApp();
       if (ownerUid !== 'me') {
-        const sub = state.shareSettings.subscribedCalendars.find(s => s.uid === ownerUid);
+        const sub = state.cloud.subscriptions.find(s => s.uid === ownerUid);
         showToast(`👀 已切換至「${sub ? sub.name : '共享對象'}」的唯讀班表`);
       }
     }
@@ -5459,17 +5584,45 @@
     }
 
     function togglePublicShareLink() {
-      state.shareSettings.publicLinkEnabled = !state.shareSettings.publicLinkEnabled;
-      renderApp();
-      showToast(state.shareSettings.publicLinkEnabled ? '🔗 已啟用唯讀班表共享連結' : '🔒 已停用外部共享連結');
+      if (!cloudAvailable() || !state.cloud.profile) return;
+      const on = !state.cloud.profile.publicLinkEnabled;
+      window.RACloud.setPublicLink(on).then(err => showToast(err || (on ? '🔗 已開啟共享，邀請碼生效' : '🔒 已關閉共享，邀請碼立即失效')));
     }
 
-    function copyShareLink() {
-      const url = `https://reverie-alarm.app/share/${state.shareSettings.inviteCode}`;
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(url).catch(() => {});
-      }
-      showToast(`📋 已複製唯讀共享連結（邀請碼：${state.shareSettings.inviteCode}）`);
+    function copyInviteCode() {
+      const p = state.cloud.profile;
+      if (!p || !p.publicLinkEnabled || !window.RACloud) { showToast('請先登入並開啟共享'); return; }
+      const code = window.RACloud.displayCode(p.inviteCode);
+      const text = `我的 Reverie Alarm 班表邀請碼：${code}\n在 App「共享帳號」輸入這組代碼，就能看到我的班表。`;
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(() => {});
+      showToast(`📋 已複製邀請碼 ${code}`);
+    }
+
+    function cloudRotateCode() {
+      if (!cloudAvailable()) return;
+      if (!confirm('更換邀請碼？\n舊的邀請碼會立刻失效，目前訂閱你的人也會全部移除。想讓誰繼續看，就把新的邀請碼再傳給他。')) return;
+      window.RACloud.rotateCode().then(err => showToast(err || '🔑 已更換邀請碼，之前訂閱的人都看不到了'));
+    }
+
+    function cloudRemoveReader(uid, name) {
+      if (!cloudAvailable()) return;
+      if (!confirm(`移除「${name}」？\n對方會立刻看不到你的班表。不想讓他再用目前的邀請碼訂閱，就更換邀請碼。`)) return;
+      window.RACloud.removeReader(uid).then(err => showToast(err || '已移除'));
+    }
+
+    function cloudUnsubscribe(uid, name) {
+      if (!cloudAvailable()) return;
+      if (!confirm(`取消訂閱「${name}」的班表？`)) return;
+      if (state.viewingCalendarOwnerUid === uid) state.viewingCalendarOwnerUid = 'me';
+      window.RACloud.unsubscribe(uid).then(() => showToast('已取消訂閱'));
+    }
+
+    function cloudTogglePublishFromHere() {
+      if (!cloudAvailable()) return;
+      const on = !state.cloud.publishFromHere;
+      if (on && !confirm('用這個瀏覽器裡的班表更新分享內容？\n會取代目前分享出去的班表（例如手機 App 上傳的）。只會上傳日期、班別名稱與上下班時間。')) return;
+      window.RACloud.setPublishFromHere(on);
+      showToast(on ? '☁️ 這個瀏覽器的班表會同步到共享' : '已停止從這個瀏覽器同步');
     }
 
     function openPublicWebPreview() {
@@ -5517,30 +5670,42 @@
 
     function handleSubscribeInviteCode(e) {
       e.preventDefault();
+      if (!cloudAvailable()) return;
       const input = document.getElementById('subscribe-code-input');
-      const code = input.value.trim().toUpperCase();
-      if (code.length < 4) {
-        showToast('請輸入有效的 6 位數邀請碼');
-        return;
-      }
-
-      const newUid = 'shared-sub-' + Date.now();
-      state.shareSettings.subscribedCalendars.push({
-        uid: newUid,
-        name: `親友共享班表 (#${code})`,
-        email: `shared.${code.toLowerCase()}@gmail.com`,
-        inviteCode: code
+      const raw = input.value;
+      window.RACloud.subscribe(raw).then(err => {
+        if (err) { showToast(err); return; }
+        input.value = '';
+        showToast(`✅ 已訂閱邀請碼 ${window.RACloud.displayCode(window.RACloud.normalizeCode(raw))} 的唯讀班表`);
       });
-
-      state.sharedExternalEvents[newUid] = [
-        { id: 'ext-new-1', ownerUid: newUid, title: '早班', type: 'early', startISO: buildLocalISO(TODAY_STR, '09:00'), endISO: buildLocalISO(TODAY_STR, '18:00'), isShared: true },
-        { id: 'ext-new-2', ownerUid: newUid, title: '休假', type: 'off', startISO: buildLocalISO(TOMORROW_STR, '00:00'), endISO: buildLocalISO(TOMORROW_STR, '23:59'), isShared: true }
-      ];
-
-      input.value = '';
-      renderApp();
-      showToast(`✅ 已成功訂閱邀請碼 #${code} 的公開班表！`);
     }
+
+    // 雲端模組（Firebase）回報狀態的入口：只更新畫面用的狀態，權限一律由伺服器端規則決定
+    let cloudRenderQueued = false;
+    function queueCloudRender() {
+      if (cloudRenderQueued) return;
+      cloudRenderQueued = true;
+      requestAnimationFrame(() => { cloudRenderQueued = false; renderApp(); });
+    }
+    window.RAApp = {
+      addDays: addDaysToDateStr,
+      onCloudReady() {
+        if (window.RACloud) window.RACloud.schedulePublish(state.events);
+      },
+      onCloudChange(c) {
+        state.authUser = c.user;
+        state.cloud = { ...state.cloud, ...c, loadFailed: false };
+        const ids = new Set(c.subscriptions.map(x => x.uid));
+        Object.keys(state.sharedExternalEvents).forEach(uid => { if (!ids.has(uid)) delete state.sharedExternalEvents[uid]; });
+        if (state.viewingCalendarOwnerUid !== 'me' && !ids.has(state.viewingCalendarOwnerUid)) state.viewingCalendarOwnerUid = 'me';
+        queueCloudRender();
+      },
+      onPartnerShifts(uid, events) {
+        state.sharedExternalEvents[uid] = events.map(sanitizeEvent).filter(Boolean);
+        queueCloudRender();
+      }
+    };
+    setTimeout(() => { if (!window.RACloud) { state.cloud.loadFailed = true; queueCloudRender(); } }, 10000);
 
     /**
      * ==========================================
@@ -5996,8 +6161,6 @@
       const loaded = loadStateFromLocal();
       if (!loaded) {
         seedInitialData();
-      } else {
-        seedPartnerSharedEvents();
       }
       applyThemeSettings();
       registerProductionPWA();
@@ -6016,6 +6179,335 @@
         triggerHolidaySafeguardCheck(false);
       }, 900);
     })();
+  </script>
+  <!-- ==========================================
+       真正的 Google 登入與共享（Firebase Authentication + Firestore）
+       - 登入：Google OAuth 彈出視窗，身分由 Firebase Authentication 驗證（不是前端模擬）
+       - 權限：一律由 Firestore 安全規則（firestore.rules）在伺服器端檢查，前端狀態只用來顯示
+       - 與 Android 版共用同一套資料：邀請碼 8 碼、訂閱者名單、只公開日期／班別／上下班時間
+       ========================================== -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, onSnapshot,
+      runTransaction, writeBatch, serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+
+    // Firebase 網頁設定不是機密（和 APK 裡的一樣），真正的保護在安全規則與「已授權網域」
+    const firebaseConfig = {
+      apiKey: 'AIzaSyCNhCFQjYAoJMIuzaSbpGYxNgwkNvVPPho',
+      authDomain: 'gooogle-32d67.firebaseapp.com',
+      projectId: 'gooogle-32d67',
+      storageBucket: 'gooogle-32d67.firebasestorage.app'
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // 不含 0/O、1/I
+    const CODE_LENGTH = 8;
+    const PUBLISH_KEY = 'reverie_publish_from_web';
+
+    const cloud = {
+      ready: false,
+      user: null,
+      profile: null,          // { inviteCode, publicLinkEnabled }
+      readers: [],            // 訂閱我的人 [{ uid, name }]
+      subscriptions: [],      // 我訂閱的 [{ uid, name, code, unavailable, count }]
+      publishFromHere: localStorage.getItem(PUBLISH_KEY) === '1'
+    };
+    let unsubReaders = null;
+    let unsubSubs = null;
+    const shiftListeners = new Map();
+    const repairTried = new Set();
+    let publishTimer = null;
+    let pendingEvents = null;
+
+    const notify = () => window.RAApp && window.RAApp.onCloudChange({ ...cloud });
+
+    function randomCode() {
+      const buf = new Uint32Array(CODE_LENGTH);
+      crypto.getRandomValues(buf); // 2^32 是 32 的倍數，取餘數不會偏差
+      return Array.from(buf, x => CODE_ALPHABET[x % CODE_ALPHABET.length]).join('');
+    }
+    const isCurrentCode = c => typeof c === 'string' && c.length === CODE_LENGTH && [...c].every(ch => CODE_ALPHABET.includes(ch));
+    const isLegacyCode = c => /^[0-9]{6}$/.test(c || '');
+    const normalizeCode = raw => String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, CODE_LENGTH);
+    const displayCode = c => (c && c.length === CODE_LENGTH) ? `${c.slice(0, 4)}-${c.slice(4)}` : (c || '');
+    const errText = e => (e && (e.code || e.message)) ? String(e.code || e.message) : '未知錯誤';
+
+    // ---------------------------------------------------------------- 登入／登出
+    async function signIn() {
+      try {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        await signInWithPopup(auth, provider);
+        return null;
+      } catch (e) {
+        if (e && (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request')) return '已取消登入';
+        if (e && e.code === 'auth/unauthorized-domain') return '這個網址還沒加入 Firebase 的「已授權網域」，暫時無法登入';
+        if (e && e.code === 'auth/popup-blocked') return '瀏覽器擋下了登入視窗，請允許此網站開啟彈出式視窗';
+        return '登入失敗：' + errText(e);
+      }
+    }
+
+    async function doSignOut() {
+      try { await signOut(auth); } catch (e) { /* 忽略 */ }
+    }
+
+    function clearListeners() {
+      if (unsubReaders) { unsubReaders(); unsubReaders = null; }
+      if (unsubSubs) { unsubSubs(); unsubSubs = null; }
+      shiftListeners.forEach(fn => fn());
+      shiftListeners.clear();
+      repairTried.clear();
+    }
+
+    onAuthStateChanged(auth, async u => {
+      clearListeners();
+      if (!u) {
+        Object.assign(cloud, { ready: true, user: null, profile: null, readers: [], subscriptions: [] });
+        notify();
+        return;
+      }
+      const name = u.displayName || 'Reverie 使用者';
+      cloud.user = { uid: u.uid, name, email: u.email || '', avatarText: name.slice(0, 1).toUpperCase() };
+      cloud.ready = true;
+      notify();
+      try { await ensureProfile(); } catch (e) { console.warn('ensureProfile', e); }
+      listenReaders();
+      listenSubscriptions();
+      notify();
+      if (pendingEvents) schedulePublish(pendingEvents);
+    });
+
+    // ---------------------------------------------------------------- 個人資料與邀請碼
+    async function ensureProfile() {
+      const u = cloud.user; if (!u) return;
+      const ref = doc(db, 'users', u.uid);
+      const snap = await getDoc(ref);
+      const data = snap.exists() ? snap.data() : null;
+      if (data && data.inviteCode) {
+        const enabled = data.publicLinkEnabled !== false;
+        cloud.profile = { inviteCode: data.inviteCode, publicLinkEnabled: enabled };
+        setDoc(ref, { name: u.name, email: u.email }, { merge: true }).catch(() => {});
+        if (!isCurrentCode(data.inviteCode)) {
+          try { await replaceCode(data.inviteCode, enabled, false); } catch (e) { /* 新規則還沒發布：先沿用舊代碼 */ }
+        } else if (enabled) {
+          try { await claimCode(data.inviteCode); } catch (e) { /* 忽略 */ }
+        }
+        return;
+      }
+      // 新帳號：預設不共享
+      const code = randomCode();
+      await setDoc(ref, { name: u.name, email: u.email, inviteCode: code, publicLinkEnabled: false, createdAt: serverTimestamp() }, { merge: true });
+      cloud.profile = { inviteCode: code, publicLinkEnabled: false };
+    }
+
+    async function reserveNewCode() {
+      const u = cloud.user;
+      for (let i = 0; i < 5; i++) {
+        const code = randomCode();
+        const ok = await runTransaction(db, async tx => {
+          const ref = doc(db, 'inviteCodes', code);
+          const s = await tx.get(ref);
+          if (s.exists()) return false;
+          tx.set(ref, { uid: u.uid, name: u.name });
+          return true;
+        }).catch(() => false);
+        if (ok) return code;
+      }
+      throw new Error('無法產生邀請碼，請稍後再試');
+    }
+
+    async function claimCode(code) {
+      const u = cloud.user;
+      const ref = doc(db, 'inviteCodes', code);
+      const s = await getDoc(ref);
+      if (!s.exists()) { await setDoc(ref, { uid: u.uid, name: u.name }); return code; }
+      if (s.data().uid === u.uid) return code;
+      const fresh = await reserveNewCode();
+      await updateDoc(doc(db, 'users', u.uid), { inviteCode: fresh });
+      cloud.profile = { ...cloud.profile, inviteCode: fresh };
+      return fresh;
+    }
+
+    async function replaceCode(oldCode, enabled, clearReaders) {
+      const u = cloud.user;
+      const fresh = enabled ? await reserveNewCode() : randomCode();
+      await updateDoc(doc(db, 'users', u.uid), { inviteCode: fresh });
+      await deleteDoc(doc(db, 'inviteCodes', oldCode)).catch(() => {});
+      if (clearReaders) {
+        const all = await getDocs(collection(db, 'publicShifts', u.uid, 'readers'));
+        for (let i = 0; i < all.docs.length; i += 400) {
+          const batch = writeBatch(db);
+          all.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+      }
+      cloud.profile = { inviteCode: fresh, publicLinkEnabled: enabled };
+      return fresh;
+    }
+
+    async function setPublicLink(enabled) {
+      const u = cloud.user, p = cloud.profile;
+      if (!u) return '請先登入';
+      if (!p) return '帳號資料尚未載入';
+      try {
+        await updateDoc(doc(db, 'users', u.uid), { publicLinkEnabled: enabled });
+        let code = p.inviteCode;
+        if (enabled) code = await claimCode(p.inviteCode);
+        else await deleteDoc(doc(db, 'inviteCodes', p.inviteCode)).catch(() => {});
+        cloud.profile = { inviteCode: code, publicLinkEnabled: enabled };
+        notify();
+        if (enabled && pendingEvents) schedulePublish(pendingEvents);
+        return null;
+      } catch (e) { return '更新失敗：' + errText(e); }
+    }
+
+    async function rotateCode() {
+      const p = cloud.profile;
+      if (!cloud.user || !p) return '請先登入';
+      try { await replaceCode(p.inviteCode, p.publicLinkEnabled, true); notify(); return null; }
+      catch (e) { return '更換失敗：' + errText(e); }
+    }
+
+    async function removeReader(readerUid) {
+      const u = cloud.user; if (!u) return '請先登入';
+      try { await deleteDoc(doc(db, 'publicShifts', u.uid, 'readers', readerUid)); return null; }
+      catch (e) { return '移除失敗：' + errText(e); }
+    }
+
+    function listenReaders() {
+      const u = cloud.user; if (!u) return;
+      unsubReaders = onSnapshot(collection(db, 'publicShifts', u.uid, 'readers'), qs => {
+        cloud.readers = qs.docs.map(d => ({ uid: d.id, name: String(d.data().name || '親友').slice(0, 100) }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        notify();
+      }, () => { cloud.readers = []; notify(); });
+    }
+
+    // ---------------------------------------------------------------- 上傳我的公開班表
+    // 預設不從網頁上傳：避免網頁上的資料蓋掉手機 App 分享出去的班表
+    function setPublishFromHere(on) {
+      cloud.publishFromHere = !!on;
+      try { localStorage.setItem(PUBLISH_KEY, on ? '1' : '0'); } catch (e) { /* 忽略 */ }
+      notify();
+      if (on && pendingEvents) schedulePublish(pendingEvents);
+    }
+
+    function schedulePublish(events) {
+      pendingEvents = events;
+      if (!cloud.user || !cloud.profile || !cloud.profile.publicLinkEnabled || !cloud.publishFromHere) return;
+      clearTimeout(publishTimer);
+      publishTimer = setTimeout(() => publishNow(events).catch(e => console.warn('publish', e)), 1500);
+    }
+
+    const TYPE_TO_ANDROID = { early: 'EARLY', evening: 'EVENING', night: 'NIGHT', off: 'OFF', custom: 'CUSTOM' };
+    async function publishNow(events) {
+      const u = cloud.user; if (!u) return;
+      // 只上傳公開欄位：日期、班別名稱、類型、上下班時間（不含備註、圖片、附件、鬧鐘）
+      const days = {};
+      events.forEach(ev => {
+        const date = ev.startISO.slice(0, 10);
+        days[date] = { t: String(ev.title).slice(0, 40), ty: TYPE_TO_ANDROID[ev.type] || 'CUSTOM', s: ev.startISO.slice(11, 16), e: ev.endISO.slice(11, 16) };
+      });
+      await setDoc(doc(db, 'publicShifts', u.uid), { name: u.name, days, updatedAt: serverTimestamp() });
+    }
+
+    // ---------------------------------------------------------------- 訂閱別人的班表
+    async function addMeAsReader(ownerUid, code) {
+      const u = cloud.user; if (!u) return false;
+      try {
+        await setDoc(doc(db, 'publicShifts', ownerUid, 'readers', u.uid), { code, name: u.name, addedAt: serverTimestamp() });
+        return true;
+      } catch (e) { return false; }
+    }
+
+    async function subscribe(raw) {
+      const u = cloud.user; if (!u) return '請先登入 Google 帳號才能訂閱';
+      const code = normalizeCode(raw);
+      if (!isCurrentCode(code) && !isLegacyCode(code)) return '請輸入 8 碼邀請碼（英文字母與數字）';
+      if (cloud.profile && code === cloud.profile.inviteCode) return '這是你自己的邀請碼';
+      try {
+        const s = await getDoc(doc(db, 'inviteCodes', code));
+        const ownerUid = s.exists() ? s.data().uid : null;
+        if (!ownerUid) return '找不到這組邀請碼，或對方已關閉共享';
+        if (ownerUid === u.uid) return '這是你自己的邀請碼';
+        const name = String(s.data().name || '親友班表').slice(0, 100);
+        await addMeAsReader(ownerUid, code);
+        await setDoc(doc(db, 'users', u.uid, 'subscriptions', ownerUid), { name, code, addedAt: serverTimestamp() });
+        repairTried.delete(ownerUid);
+        return null;
+      } catch (e) {
+        if (e && e.code === 'permission-denied') return '找不到這組邀請碼，或對方已關閉共享';
+        return '訂閱失敗：' + errText(e);
+      }
+    }
+
+    async function unsubscribe(ownerUid) {
+      const u = cloud.user; if (!u) return;
+      await deleteDoc(doc(db, 'publicShifts', ownerUid, 'readers', u.uid)).catch(() => {});
+      await deleteDoc(doc(db, 'users', u.uid, 'subscriptions', ownerUid)).catch(() => {});
+    }
+
+    function listenSubscriptions() {
+      const u = cloud.user; if (!u) return;
+      unsubSubs = onSnapshot(collection(db, 'users', u.uid, 'subscriptions'), qs => {
+        const wanted = new Map(qs.docs.map(d => [d.id, { uid: d.id, name: String(d.data().name || '親友班表').slice(0, 100), code: String(d.data().code || '').slice(0, 16) }]));
+        [...shiftListeners.keys()].forEach(uid => { if (!wanted.has(uid)) { shiftListeners.get(uid)(); shiftListeners.delete(uid); } });
+        cloud.subscriptions = [...wanted.values()].map(w => {
+          const old = cloud.subscriptions.find(s => s.uid === w.uid);
+          return { ...w, unavailable: old ? old.unavailable : false, count: old ? old.count : null };
+        });
+        wanted.forEach((w, uid) => { if (!shiftListeners.has(uid)) listenShifts(uid); });
+        notify();
+      }, () => { cloud.subscriptions = []; notify(); });
+    }
+
+    const ANDROID_TO_TYPE = { EARLY: 'early', EVENING: 'evening', NIGHT: 'night', OFF: 'off', CUSTOM: 'custom' };
+    function listenShifts(ownerUid) {
+      const off = onSnapshot(doc(db, 'publicShifts', ownerUid), snap => {
+        const days = (snap.exists() && snap.data().days && typeof snap.data().days === 'object') ? snap.data().days : {};
+        const events = [];
+        Object.entries(days).slice(0, 5000).forEach(([date, v]) => {
+          // 雲端資料一律當成不可信：格式不對就丟掉
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !v || typeof v !== 'object') return;
+          const s = /^\d{2}:\d{2}$/.test(v.s || '') ? v.s : '00:00';
+          const e = /^\d{2}:\d{2}$/.test(v.e || '') ? v.e : '23:59';
+          const type = ANDROID_TO_TYPE[v.ty] || 'custom';
+          const endDate = (type !== 'off' && e <= s) ? window.RAApp.addDays(date, 1) : date;
+          events.push({ id: `ext-${ownerUid.slice(0, 12)}-${date}`, title: String(v.t || '').slice(0, 40), type, startISO: `${date}T${s}:00`, endISO: `${endDate}T${e}:00`, isShared: true });
+        });
+        updateSub(ownerUid, { unavailable: false, count: events.length });
+        window.RAApp && window.RAApp.onPartnerShifts(ownerUid, events);
+      }, () => {
+        // 讀不到：對方關閉共享、更換邀請碼、把我移除，或是更新前訂閱的
+        updateSub(ownerUid, { unavailable: true, count: 0 });
+        window.RAApp && window.RAApp.onPartnerShifts(ownerUid, []);
+        const sub = cloud.subscriptions.find(x => x.uid === ownerUid);
+        if (sub && sub.code && !repairTried.has(ownerUid)) {
+          repairTried.add(ownerUid);
+          addMeAsReader(ownerUid, sub.code).then(ok => {
+            if (ok) { const f = shiftListeners.get(ownerUid); if (f) f(); shiftListeners.delete(ownerUid); listenShifts(ownerUid); }
+          });
+        }
+      });
+      shiftListeners.set(ownerUid, off);
+    }
+
+    function updateSub(uid, patch) {
+      cloud.subscriptions = cloud.subscriptions.map(s => s.uid === uid ? { ...s, ...patch } : s);
+      notify();
+    }
+
+    window.RACloud = {
+      signIn, signOut: doSignOut, setPublicLink, rotateCode, removeReader,
+      subscribe, unsubscribe, schedulePublish, setPublishFromHere, normalizeCode, displayCode
+    };
+    if (window.RAApp) window.RAApp.onCloudReady();
   </script>
 </body>
 </html>

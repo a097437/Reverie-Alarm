@@ -785,7 +785,7 @@ fun WebAlarmsScreen(
 private fun RingtoneDropdown(ringtones: List<RingtoneEntry>, current: RingtoneEntry?, theme: ThemePalette, modifier: Modifier = Modifier, onPick: (RingtoneEntry) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
-        WebSelectBox(tr(current?.name ?: BuiltInRingtones.WAKE_STRONG.name), theme, Modifier.fillMaxWidth(), fontSize = 12.sp) { open = true }
+        WebSelectBox(tr(current?.name ?: BuiltInRingtones.DEFAULT_WAKE.name), theme, Modifier.fillMaxWidth(), fontSize = 12.sp) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = theme.bgCard) {
             ringtones.forEach { rt ->
                 DropdownMenuItem(
@@ -924,7 +924,7 @@ private fun RingtoneLine(
             Icon(Tabler.Music, contentDescription = null, tint = theme.textMuted, modifier = Modifier.size(13.dp))
             Spacer(Modifier.width(4.dp))
             Text(
-                tr(current?.name ?: BuiltInRingtones.WAKE_STRONG.name), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = theme.textMuted,
+                tr(current?.name ?: BuiltInRingtones.DEFAULT_WAKE.name), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = theme.textMuted,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
             )
             Spacer(Modifier.width(2.dp))
@@ -1280,8 +1280,11 @@ fun WebSharingScreen(
     val profile = CloudSync.profile
     val subs = CloudSync.subscriptions.toList()
     val signedIn = user != null
-    val inviteCode = profile?.inviteCode
+    val inviteCode = profile?.inviteCode?.let { CloudSync.displayCode(it) }
     val publicOn = profile?.publicLinkEnabled == true
+    val readers = CloudSync.readers.toList()
+    var confirmRotate by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf<CloudReader?>(null) }
     var codeInput by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
@@ -1400,7 +1403,7 @@ fun WebSharingScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(tr("6 位數共享邀請碼"), fontSize = 12.sp, color = theme.textMuted, modifier = Modifier.weight(1f))
+                            Text(tr("共享邀請碼"), fontSize = 12.sp, color = theme.textMuted, modifier = Modifier.weight(1f))
                             Text(
                                 when {
                                     !signedIn -> tr("登入後產生")
@@ -1410,7 +1413,7 @@ fun WebSharingScreen(
                                 },
                                 fontSize = if (signedIn && publicOn && inviteCode != null) 22.sp else 13.sp,
                                 fontWeight = FontWeight.Black, fontFamily = FontFamily.Monospace, color = theme.accentText,
-                                letterSpacing = if (signedIn && publicOn) 3.sp else 0.sp
+                                letterSpacing = if (signedIn && publicOn) 2.sp else 0.sp
                             )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1431,6 +1434,28 @@ fun WebSharingScreen(
                             }
                             WebButton(tr("預覽對方看到的"), theme, Modifier.weight(1f), filled = false, vertical = 11.dp) { showPreview = true }
                         }
+                        // 誰訂閱了我：可以個別移除，或更換邀請碼一次全部移除
+                        if (signedIn) {
+                            HorizontalDivider(color = theme.borderColor)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(tr("訂閱我的人（{0}）", readers.size), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.textMuted, modifier = Modifier.weight(1f))
+                                WebButton(tr("更換邀請碼"), theme, filled = false, fontSize = 11.sp, vertical = 6.dp, enabled = !working) { confirmRotate = true }
+                            }
+                            if (readers.isEmpty()) {
+                                Text(tr("還沒有人訂閱。對方輸入你的邀請碼後會出現在這裡，你可以隨時移除。"), fontSize = 11.sp, color = theme.textMuted, lineHeight = 16.sp)
+                            }
+                            readers.forEach { r ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Tabler.Users, contentDescription = null, tint = theme.textMuted, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(r.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.textMain, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Text(
+                                        tr("移除"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ROSE.readable(),
+                                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(enabled = !working) { confirmRemove = r }.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                     Row(
                         modifier = Modifier
@@ -1445,7 +1470,7 @@ fun WebSharingScreen(
                         Text(
                             buildAnnotatedString {
                                 withStyle(SpanStyle(fontWeight = FontWeight.Black)) { append(tr("資料隔離：")) }
-                                append(tr("雲端只存「日期、班別名稱與上下班時間」。私人備註、排班圖片、附件與鬧鐘不會上傳，任何人都看不到。關閉共享後，對方立刻無法讀取。"))
+                                append(tr("雲端只存「日期、班別名稱與上下班時間」。私人備註、排班圖片、附件與鬧鐘不會上傳，任何人都看不到。只有輸入過邀請碼、而且還在「訂閱我的人」名單上的人讀得到；關閉共享、更換邀請碼或移除對方後，對方立刻無法讀取。"))
                             },
                             fontSize = 12.sp, color = Color(0xFF6EE7B7).readable(6.0), lineHeight = 18.sp
                         )
@@ -1478,14 +1503,14 @@ fun WebSharingScreen(
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        WebTextField(codeInput, if (signedIn) tr("輸入對方 6 位數邀請碼") else tr("登入後才能訂閱"), theme, Modifier.weight(1f)) { v -> codeInput = v.filter { it.isDigit() }.take(6) }
+                        WebTextField(codeInput, if (signedIn) tr("輸入對方的 8 碼邀請碼") else tr("登入後才能訂閱"), theme, Modifier.weight(1f)) { v -> codeInput = CloudSync.normalizeCode(v) }
                         Spacer(Modifier.width(10.dp))
                         WebButton(if (working) tr("處理中…") else tr("訂閱班表"), theme, vertical = 12.dp, enabled = signedIn && !working) {
                             val code = codeInput
                             act {
                                 CloudSync.subscribe(code) ?: run {
                                     codeInput = ""
-                                    AppToast.show(tr("✅ 已訂閱邀請碼 #{0} 的唯讀班表", code))
+                                    AppToast.show(tr("✅ 已訂閱邀請碼 #{0} 的唯讀班表", CloudSync.displayCode(code)))
                                     null
                                 }
                             }
@@ -1511,9 +1536,9 @@ fun WebSharingScreen(
                                 Text(sub.name, fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     when {
-                                        sub.unavailable -> tr("對方已關閉共享")
-                                        sub.shifts == null -> tr("邀請碼：{0} · 同步中…", sub.code)
-                                        else -> tr("邀請碼：{0} · {1} 天班表", sub.code, sub.shifts.size)
+                                        sub.unavailable -> tr("讀不到：對方關閉了共享或更換了邀請碼，請向對方要新的邀請碼")
+                                        sub.shifts == null -> tr("邀請碼：{0} · 同步中…", CloudSync.displayCode(sub.code))
+                                        else -> tr("邀請碼：{0} · {1} 天班表", CloudSync.displayCode(sub.code), sub.shifts.size)
                                     },
                                     fontSize = 12.sp, color = if (sub.unavailable) ROSE.readable() else theme.textMuted
                                 )
@@ -1543,6 +1568,41 @@ fun WebSharingScreen(
             theme = theme,
             footer = tr("對方只看得到這些：不包含任何鬧鐘、私人備註、圖片或附件。"),
             onDismiss = { showPreview = false }
+        )
+    }
+
+    MotionHost(confirmRotate) {
+        MotionAlertDialog(
+            onDismissRequest = { confirmRotate = false },
+            containerColor = theme.bgCard,
+            title = { Text(tr("更換邀請碼？"), fontWeight = FontWeight.Black, color = theme.textMain) },
+            text = { Text(tr("舊的邀請碼會立刻失效，目前訂閱你的人也會全部移除。想讓誰繼續看，就把新的邀請碼再傳給他。"), fontSize = 13.sp, color = theme.textMuted, lineHeight = 19.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRotate = false
+                    act { CloudSync.rotateCode() ?: run { AppToast.show(tr("🔑 已更換邀請碼，之前訂閱的人都看不到了")); null } }
+                }) { Text(tr("更換"), color = ROSE.readable(), fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRotate = false }) { Text(tr("取消"), color = theme.textMuted) } }
+        )
+    }
+
+    var lastRemove by remember { mutableStateOf<CloudReader?>(null) }
+    confirmRemove?.let { lastRemove = it }
+    MotionHost(confirmRemove != null) {
+        val r = lastRemove
+        MotionAlertDialog(
+            onDismissRequest = { confirmRemove = null },
+            containerColor = theme.bgCard,
+            title = { Text(tr("移除訂閱者？"), fontWeight = FontWeight.Black, color = theme.textMain) },
+            text = { Text(tr("「{0}」會立刻看不到你的班表。對方之後還是可以用目前的邀請碼重新訂閱；不想讓他再訂閱就更換邀請碼。", r?.name), fontSize = 13.sp, color = theme.textMuted, lineHeight = 19.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = null
+                    if (r != null) act { CloudSync.removeReader(r.uid) }
+                }) { Text(tr("移除"), color = ROSE.readable(), fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = null }) { Text(tr("取消"), color = theme.textMuted) } }
         )
     }
 

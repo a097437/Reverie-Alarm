@@ -144,7 +144,7 @@ data class ShiftAlarm(
     val label: String,
     val enabled: Boolean = true,
     val ringtoneUri: String? = null,
-    val ringtoneName: String = "強效雙音階喚醒",
+    val ringtoneName: String = "晨空漫步",
     val maxSnoozeCount: Int = 2,
     val snoozeMinutes: Int = 5
 )
@@ -162,9 +162,9 @@ data class AppPreferences(
     val customAccentHex: String = "",
     val customGridBgHex: String = "",
     val defaultWakeRingtoneUri: String? = null,
-    val defaultWakeRingtoneName: String = "強效雙音階喚醒",
+    val defaultWakeRingtoneName: String = "晨空漫步",
     val defaultLeaveRingtoneUri: String? = null,
-    val defaultLeaveRingtoneName: String = "出門倒數清脆提醒",
+    val defaultLeaveRingtoneName: String = "清脆八音盒",
     // ---- 與網頁版一致的外觀設定 ----
     val colorMode: String = "dark",          // light / dark / system
     val contrast: String = "standard",       // soft / standard / high
@@ -334,6 +334,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         I18n.ensure(applicationContext)
+        AppSecurity.installAppCheck(applicationContext) // 要在任何 Firebase 請求之前
         // 動畫速度由 App 內「介面動態效果」決定，不受手機「開發者選項 → 動畫縮放 = 關閉」影響
         // （系統縮放為 0 時，Compose 預設會讓所有動畫瞬間完成）
         val ctx = androidx.compose.ui.platform.AndroidUiDispatcher.Main + AppMotionDurationScale

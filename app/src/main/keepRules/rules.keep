@@ -10,3 +10,7 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+# App Check 偵錯提供者是用名稱載入的（只有測試版會打包），別讓 R8 改名或移除
+-keep class com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory {
+    public static *** getInstance();
+}

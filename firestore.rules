@@ -2,41 +2,94 @@ rules_version = '2';
 
 // Reverie Alarm 共享帳號安全規則
 // 部署：Firebase Console → Firestore Database → 規則 → 貼上整份內容 → 發布
+//
+// 存取控制重點：
+//   - 只有本人能讀寫自己的資料與訂閱清單
+//   - 邀請碼 8 碼英數（不能用猜的）；只能用完整代碼查詢，不能列出全部
+//   - 班表只有「訂閱者名單」上的人讀得到；要加進名單必須知道對方「目前的」邀請碼
+//   - 主人可以移除任何訂閱者；更換邀請碼後，舊代碼加不進名單
+//   - 每個欄位都限制型別與長度，避免被塞入大量資料
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    // 8 碼，不含 0/O、1/I
+    function validCode(code) { return code is string && code.matches('^[2-9A-HJ-NP-Z]{8}$'); }
+    function shortText(v, max) { return v is string && v.size() <= max; }
 
     // 個人資料（邀請碼、公開連結開關）：只有本人能讀寫
     match /users/{uid} {
-      allow read, write: if isOwner(uid);
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && shortText(request.resource.data.get('name', ''), 100)
+        && shortText(request.resource.data.get('email', ''), 200)
+        && shortText(request.resource.data.get('inviteCode', ''), 16)
+        && request.resource.data.get('publicLinkEnabled', false) is bool;
 
       // 我訂閱了誰：只有本人能讀寫
       match /subscriptions/{ownerUid} {
-        allow read, write: if isOwner(uid);
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['name', 'code', 'addedAt'])
+          && shortText(request.resource.data.get('name', ''), 100)
+          && shortText(request.resource.data.get('code', ''), 16);
       }
     }
 
     // 邀請碼 → 帳號：登入者只能用「完整代碼」查詢（get），不能列出全部代碼（list）
     match /inviteCodes/{code} {
-      allow get: if signedIn();
+      // 只接受 8 碼格式：舊的 6 位數代碼（可以被逐一猜出）一律查不到
+      allow get: if signedIn() && validCode(code);
       allow list: if false;
       allow create: if signedIn()
-        && code.matches('^[0-9]{6}$')
+        && validCode(code)
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid', 'name']);
+        && request.resource.data.keys().hasOnly(['uid', 'name'])
+        && shortText(request.resource.data.name, 100);
       allow update: if false;
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
-    // 公開班表：只有本人能寫；對方開著公開連結時，登入者才讀得到
+    // 公開班表：只有本人能寫。其他人要同時符合：
+    //   1. 對方開著共享
+    //   2. 我在對方的訂閱者名單上
+    //   3. 我當初用的邀請碼 == 對方「目前的」邀請碼（對方一更換邀請碼，所有人立刻失效）
+    // 只知道對方的 UID 沒有用：沒有目前的邀請碼就加不進名單
     match /publicShifts/{uid} {
       allow read: if isOwner(uid)
-        || (signedIn() && get(/databases/$(database)/documents/users/$(uid)).data.publicLinkEnabled == true);
+        || (signedIn()
+            && get(/databases/$(database)/documents/users/$(uid)).data.publicLinkEnabled == true
+            && get(/databases/$(database)/documents/publicShifts/$(uid)/readers/$(request.auth.uid)).data.code
+               == get(/databases/$(database)/documents/users/$(uid)).data.inviteCode);
       allow create, update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['name', 'days', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['name', 'days', 'updatedAt'])
+        && shortText(request.resource.data.name, 100)
+        && request.resource.data.days is map
+        && request.resource.data.days.size() <= 5000;
       allow delete: if isOwner(uid);
+
+      // 訂閱者名單：用「目前的」邀請碼才能把自己加進來；主人看得到名單、可以移除任何人；訂閱者可以移除自己
+      match /readers/{readerUid} {
+        allow create, update: if isOwner(readerUid)
+          && readerUid != uid
+          && request.resource.data.keys().hasOnly(['code', 'name', 'addedAt'])
+          && validCode(request.resource.data.code)
+          && get(/databases/$(database)/documents/inviteCodes/$(request.resource.data.code)).data.uid == uid
+          && shortText(request.resource.data.name, 100);
+        allow read, delete: if isOwner(uid) || isOwner(readerUid);
+      }
+    }
+
+    // 回報不當的 AI 回覆：登入者只能新增自己的回報，任何人都不能讀（開發者在 Firebase 主控台查看）
+    match /aiReports/{id} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'prompt', 'reply', 'appVersion', 'createdAt'])
+        && shortText(request.resource.data.prompt, 1000)
+        && shortText(request.resource.data.reply, 2000)
+        && shortText(request.resource.data.appVersion, 20);
+      allow read, update, delete: if false;
     }
 
     // 其他路徑一律拒絕

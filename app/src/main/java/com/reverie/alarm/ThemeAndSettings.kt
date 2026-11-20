@@ -740,7 +740,7 @@ val APP_CHANGELOG get() = listOf(
         "v1.0.0", "2026.11.19", listOf(
             tr("Android 原生版首次發佈（Kotlin + Jetpack Compose）"),
             tr("原生鬧鐘引擎：鎖屏、App 關閉、重開機後都會準時響鈴，貪睡與出門倒數分開設定"),
-            tr("5 首內建合成鈴聲，支援匯入手機音訊與試響"),
+            tr("11 首授權明確的柔和鈴聲，支援匯入手機音訊與試響"),
             tr("跟手月曆：左右拖曳即時預覽上／下個月，拖曳空白處切換 5 大分頁"),
             tr("日期上方浮動「編輯排班」膠囊與完整開關動畫，可調整動畫速度或關閉"),
             tr("桌面小工具：顯示今日班表與下一個鬧鐘"),
@@ -890,6 +890,35 @@ fun AboutAppSheet(
                 updateResult?.let {
                     IconText(it, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
+            }
+
+            // CC BY 4.0 要求在 App 內標註作者、授權與是否修改過
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+            SectionCard(tr("🎵 鈴聲音樂致謝"), palette) {
+                BuiltInRingtones.CREDITS.forEach { c ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(palette.bgCard)
+                            .border(1.dp, palette.borderColor, RoundedCornerShape(12.dp))
+                            .clickable { runCatching { uriHandler.openUri(c.url) } }
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(tr(c.toneName), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain)
+                        Text("\"${c.title}\" by ${c.author}, ${c.license}", fontSize = 11.sp, color = palette.textMain)
+                        Text(c.url, fontSize = 10.sp, color = palette.accentText)
+                    }
+                }
+                Text(
+                    tr("以上曲目依 CC BY 4.0 授權使用，已剪輯成循環片段並調整音量。其他內建鈴聲為 CC0（公眾領域）。"),
+                    fontSize = 10.sp, color = palette.textMuted, lineHeight = 15.sp
+                )
+                Text(
+                    BuiltInRingtones.CC_BY_URL, fontSize = 10.sp, color = palette.accentText,
+                    modifier = Modifier.clickable { runCatching { uriHandler.openUri(BuiltInRingtones.CC_BY_URL) } }
+                )
             }
         }
     }
