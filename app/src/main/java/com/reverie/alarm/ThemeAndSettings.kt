@@ -59,7 +59,7 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v2.0.1"
+const val APP_VERSION = "v2.0.2"
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
@@ -714,6 +714,12 @@ private fun SwatchGrid(
 data class ChangelogEntry(val version: String, val date: String, val highlights: List<String>)
 
 val APP_CHANGELOG get() = listOf(
+    ChangelogEntry(
+        "v2.0.2", "2026.11.20", listOf(
+            tr("自動檢查更新：打開 App 時（一天一次）會比對 GitHub 上的最新版本，有新版就顯示更新內容，可以直接下載或略過"),
+            tr("「立即檢查更新」改成真的連線檢查；側邊欄有新版時會顯示「有新版本」")
+        )
+    ),
     ChangelogEntry(
         "v2.0.1", "2026.11.20", listOf(
             tr("修正 AI快速排班的語音輸入：沒有下載離線語音包的手機會顯示「無法使用語音搜尋功能」")

@@ -422,7 +422,9 @@ object I18nEn {
         "保持開啟" to "Keep on",
         "一鍵暫停明日鬧鐘" to "Pause tomorrow's alarms",
 
-        // ---------------- v2.0.1／v2.0.0 更新日誌 ----------------
+        // ---------------- v2.0.2／v2.0.1／v2.0.0 更新日誌 ----------------
+        "自動檢查更新：打開 App 時（一天一次）會比對 GitHub 上的最新版本，有新版就顯示更新內容，可以直接下載或略過" to "Automatic update check: once a day on launch, compares with the latest GitHub release and shows what's new, with Download or Skip",
+        "「立即檢查更新」改成真的連線檢查；側邊欄有新版時會顯示「有新版本」" to "\"Check for updates\" now really checks online, and the side menu shows when an update is available",
         "修正 AI快速排班的語音輸入：沒有下載離線語音包的手機會顯示「無法使用語音搜尋功能」" to "Fixed voice input in AI Plan failing with \"voice search unavailable\" on phones without the offline speech pack",
         "AI快速排班：用聊的、用說的，或拍一張班表照片，Gemini 幫你排好整個月（登入 Google 即可使用，不用設定金鑰）" to "AI Plan: chat, speak, or snap a roster photo and Gemini schedules the whole month (sign in with Google, no API key needed)",
         "沒登入也能用：手機上就能看懂「21 到 25 號早班」「下週一三五晚班」這類說法" to "Works without sign-in too: understands Chinese phrases like 「21 到 25 號早班」 on the phone",
