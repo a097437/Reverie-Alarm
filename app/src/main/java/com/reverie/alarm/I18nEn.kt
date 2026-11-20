@@ -458,7 +458,10 @@ object I18nEn {
         "這是舊版的 6 位數邀請碼，請對方更新 App，再把新的 8 碼邀請碼傳給你" to "This is an old 6-digit code. Ask them to update the app and send you the new 8-character code",
         "移除訂閱者？" to "Remove follower?",
         "「{0}」會立刻看不到你的班表。對方之後還是可以用目前的邀請碼重新訂閱；不想讓他再訂閱就更換邀請碼。" to "\"{0}\" will stop seeing your schedule right away. They can follow again with your current code; change the code to prevent that.",
-        // ---------------- v2.0.3／v2.0.2／v2.0.1／v2.0.0 更新日誌 ----------------
+        // ---------------- v2.0.4／v2.0.3／v2.0.2／v2.0.1／v2.0.0 更新日誌 ----------------
+        "鈴聲音量統一：11 首在手機喇叭上聽起來一樣大聲，同一首也不再忽大忽小" to "Even ringtone volume: all 11 tones sound equally loud on a phone speaker, without loud and quiet swings",
+        "響鈴改成從幾乎無聲開始，12 秒平順變大；試聽也會淡入" to "Alarms now fade in smoothly from near silence over 12 seconds; previews fade in too",
+        "匯入備份檔與音樂更安全：先完整檢查再套用，失敗時資料不動，也會擋掉不安全的檔案連結" to "Safer backup and music import: everything is checked before it's applied, nothing changes on failure, and unsafe file links are blocked",
         "內建鈴聲換成 11 首授權明確的柔和音樂（鋼琴、木吉他、八音盒），可無縫循環、音量一致" to "Built-in ringtones replaced with 11 gentle, properly licensed tracks (piano, guitar, music box) that loop seamlessly at an even volume",
         "共享更安全：邀請碼改成 8 碼、可以看到並移除訂閱你的人、可以更換邀請碼；新帳號預設不共享" to "Safer sharing: 8-character invite codes, see and remove who follows you, change your code anytime; new accounts start with sharing off",
         "AI 快速排班加上每日次數與長度限制、會再檢查 AI 排出的日期，也可以回報不當的 AI 回覆" to "AI quick schedule now has daily limits, double-checks the dates AI returns, and lets you report inappropriate replies",

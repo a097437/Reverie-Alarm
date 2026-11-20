@@ -59,7 +59,7 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v2.0.3"
+const val APP_VERSION = "v2.0.4"
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
@@ -714,6 +714,13 @@ private fun SwatchGrid(
 data class ChangelogEntry(val version: String, val date: String, val highlights: List<String>)
 
 val APP_CHANGELOG get() = listOf(
+    ChangelogEntry(
+        "v2.0.4", "2026.11.21", listOf(
+            tr("鈴聲音量統一：11 首在手機喇叭上聽起來一樣大聲，同一首也不再忽大忽小"),
+            tr("響鈴改成從幾乎無聲開始，12 秒平順變大；試聽也會淡入"),
+            tr("匯入備份檔與音樂更安全：先完整檢查再套用，失敗時資料不動，也會擋掉不安全的檔案連結")
+        )
+    ),
     ChangelogEntry(
         "v2.0.3", "2026.11.21", listOf(
             tr("內建鈴聲換成 11 首授權明確的柔和音樂（鋼琴、木吉他、八音盒），可無縫循環、音量一致"),
