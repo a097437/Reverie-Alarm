@@ -58,7 +58,7 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v2.0.0"
+const val APP_VERSION = "v2.0.1"
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
@@ -713,6 +713,11 @@ private fun SwatchGrid(
 data class ChangelogEntry(val version: String, val date: String, val highlights: List<String>)
 
 val APP_CHANGELOG get() = listOf(
+    ChangelogEntry(
+        "v2.0.1", "2026.11.20", listOf(
+            tr("修正 AI快速排班的語音輸入：沒有下載離線語音包的手機會顯示「無法使用語音搜尋功能」")
+        )
+    ),
     ChangelogEntry(
         "v2.0.0", "2026.11.20", listOf(
             tr("AI快速排班：用聊的、用說的，或拍一張班表照片，Gemini 幫你排好整個月（登入 Google 即可使用，不用設定金鑰）"),

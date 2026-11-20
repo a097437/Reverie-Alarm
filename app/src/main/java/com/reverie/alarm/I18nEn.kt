@@ -422,7 +422,8 @@ object I18nEn {
         "保持開啟" to "Keep on",
         "一鍵暫停明日鬧鐘" to "Pause tomorrow's alarms",
 
-        // ---------------- v2.0.0 更新日誌 ----------------
+        // ---------------- v2.0.1／v2.0.0 更新日誌 ----------------
+        "修正 AI快速排班的語音輸入：沒有下載離線語音包的手機會顯示「無法使用語音搜尋功能」" to "Fixed voice input in AI Plan failing with \"voice search unavailable\" on phones without the offline speech pack",
         "AI快速排班：用聊的、用說的，或拍一張班表照片，Gemini 幫你排好整個月（登入 Google 即可使用，不用設定金鑰）" to "AI Plan: chat, speak, or snap a roster photo and Gemini schedules the whole month (sign in with Google, no API key needed)",
         "沒登入也能用：手機上就能看懂「21 到 25 號早班」「下週一三五晚班」這類說法" to "Works without sign-in too: understands Chinese phrases like 「21 到 25 號早班」 on the phone",
         "天氣分頁：結合班表的通勤天氣、帶傘提醒、24 小時與 7 天預報、天氣特報" to "Weather tab: commute weather matched to your shifts, umbrella reminders, 24-hour and 7-day forecasts, and alerts",
