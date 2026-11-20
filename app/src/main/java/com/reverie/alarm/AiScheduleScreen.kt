@@ -138,7 +138,6 @@ fun AiScheduleScreen(
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-TW")
-            .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             .putExtra(RecognizerIntent.EXTRA_PROMPT, tr("說出要排的班，例如：21 到 25 號早班"))
         try { speech.launch(intent) } catch (_: ActivityNotFoundException) { AppToast.show(tr("這支手機沒有語音輸入，請改用打字")) }
     }
