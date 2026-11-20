@@ -1,18 +1,31 @@
 """把授權明確的音樂做成 App 內建鬧鐘鈴聲（res/raw/rt_*.ogg）。
 
 用法：python make_tones.py <原始音檔資料夾> <輸出資料夾>
-需要：numpy、soundfile
+需要：numpy、soundfile（響度計算在同資料夾的 loudness.py）
 
-- 「loop」：原曲本身可無縫循環，整首保留，只調音量
-- 「cut」：跳過安靜的前奏，取 60 秒，尾端 3 秒交叉淡入接回開頭，循環時聽不到斷點
-- 音量統一到平均 -17 dBFS，峰值限制在 -1 dBFS（柔和的限制器，不會破音）
-- 輸出 OGG Vorbis，約 128 kbps
+處理流程（目標：每首在「手機喇叭」上聽起來一樣大聲、同一首裡也不要忽大忽小）
+1. 取片段
+   - 「loop」：原曲本身可無縫循環，整首保留
+   - 「cut」：跳過安靜的前奏，取 60 秒，尾端 3 秒交叉淡入接回開頭，循環時聽不到斷點
+2. 去掉 120 Hz 以下的低音：手機喇叭放不出來，只會吃掉音量空間
+3. 平順化：用 3 秒短期響度看整首的起伏，太小聲的地方慢慢補、太大聲的地方慢慢壓（最多 ±8 dB，變化很慢、不會忽大忽小）
+4. 響度統一：用「K 加權 + 手機喇叭」的響度（見 loudness.py）把每首調到同樣的 LUFS
+5. 峰值限制在 -1 dBFS（柔和的限制器，不會破音）
+6. 輸出 OGG Vorbis，約 128 kbps
+
+淡入不做在檔案裡（循環時會一直重來），由 App 播放時處理。
 """
 import sys, os, io
 import numpy as np, soundfile as sf
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import loudness as L
 
 SRC, OUT = sys.argv[1], sys.argv[2]
-LEN, XF, TARGET_DB, CEIL, KBPS = 60.0, 3.0, -17.0, 10 ** (-1.0 / 20), 128
+LEN, XF = 60.0, 3.0
+TARGET_LUFS = -18.0      # 手機喇叭加權後的目標響度
+CEIL = 10 ** (-1.0 / 20)
+KBPS = 128
+HIGHPASS_HZ = 120.0
 
 TONES = [  # (原始檔, raw 名稱, 處理方式)
     ("Morning Sky - Centurion_of_war.ogg", "rt_morning_sky", "loop"),
@@ -33,6 +46,33 @@ def rms_db(a):
     return 20 * np.log10(np.sqrt(np.mean(a ** 2)) + 1e-9)
 
 
+def highpass(x, sr, fc=HIGHPASS_HZ, order=2):
+    """頻域高通（循環濾波：片段本身就是循環的，接縫不會出問題）"""
+    X = np.fft.rfft(x, axis=0)
+    f = np.fft.rfftfreq(x.shape[0], 1 / sr)
+    with np.errstate(divide='ignore'):
+        H = 1 / np.sqrt(1 + (fc / np.maximum(f, 1e-6)) ** (2 * order))
+    return np.fft.irfft(X * H[:, None], n=x.shape[0], axis=0)
+
+
+def level(x, sr, ratio=0.6, max_db=8.0):
+    """慢速平順化：依 3 秒短期響度（手機加權）調整增益，循環計算、接縫連續"""
+    y = L.weighted(x, sr, phone=True)
+    hop, win = sr // 2, 3 * sr
+    n = len(y)
+    centers = np.arange(0, n, hop)
+    yy = np.concatenate([y[-win // 2:], y, y[:win // 2]])  # 循環補邊
+    st = np.array([-0.691 + 10 * np.log10(np.mean(yy[c:c + win] ** 2, axis=0).sum() + 1e-12) for c in centers])
+    ref = np.median(st[st > -60]) if np.any(st > -60) else -30
+    dev = st - ref
+    g = np.clip(-dev * ratio, -max_db, max_db)
+    g[st < ref - 25] = 0.0  # 幾乎無聲的地方不要硬拉
+    k = 9  # 約 4.5 秒的循環平滑
+    g = np.convolve(np.concatenate([g[-k:], g, g[:k]]), np.ones(k) / k, mode='same')[k:-k]
+    gs = np.interp(np.arange(n), np.append(centers, n), np.append(g, g[0]))
+    return x * (10 ** (gs / 20))[:, None], float(st[st > -60].max() - st[st > -60].min()) if np.any(st > -60) else 0.0
+
+
 def limiter(x, sr):
     blk = sr // 200  # 5 ms
     n = int(np.ceil(len(x) / blk))
@@ -44,12 +84,14 @@ def limiter(x, sr):
     for i in range(n):
         cur = target[i] if target[i] < cur else min(target[i], 1 - (1 - cur) * rel)
         g[i] = cur
-    return x * np.interp(np.arange(len(x)), np.arange(n) * blk + blk / 2, g)[:, None]
+    gr_db = -20 * np.log10(g)
+    out = x * np.interp(np.arange(len(x)), np.arange(n) * blk + blk / 2, g)[:, None]
+    return out, float(gr_db.max()), float(np.mean(gr_db > 2.0) * 100)
 
 
-def encode(y, sr, level):
+def encode(y, sr, level_q):
     buf = io.BytesIO()
-    with sf.SoundFile(buf, 'w', sr, y.shape[1], format='OGG', subtype='VORBIS', compression_level=level) as f:
+    with sf.SoundFile(buf, 'w', sr, y.shape[1], format='OGG', subtype='VORBIS', compression_level=level_q) as f:
         for i in range(0, len(y), 4096):  # 一次寫太多 libsndfile 的 Vorbis 編碼器會當掉
             f.write(y[i:i + 4096])
     return buf.getvalue()
@@ -88,9 +130,17 @@ for fn, name, mode in TONES:
         body[:k] = body[:k] * np.sin(t * np.pi / 2) + seg[-k:] * np.cos(t * np.pi / 2)
     else:
         start, body = 0, x
-    gain = 10 ** ((TARGET_DB - rms_db(body.mean(axis=1))) / 20)
-    y = limiter(body * gain, sr).astype('float32')
+    body = highpass(body, sr)
+    body, swing = level(body, sr)
+    # 響度統一（手機喇叭加權）；限制器壓掉的部分再補回一次，讓最後的響度貼近目標
+    gain_db = TARGET_LUFS - L.integrated(L.weighted(body, sr), sr)
+    y, gr_max, gr_pct = limiter(body * 10 ** (gain_db / 20), sr)
+    fix = TARGET_LUFS - L.integrated(L.weighted(y, sr), sr)
+    if abs(fix) > 0.2:
+        y, gr_max, gr_pct = limiter(body * 10 ** ((gain_db + fix) / 20), sr)
+    y = y.astype('float32')
     data, kbps = encode_kbps(y, sr)
     open(os.path.join(OUT, name + '.ogg'), 'wb').write(data)
-    print(f"{name:22s} {mode:4s} start={start:3d}s len={len(y)/sr:5.1f}s gain={20*np.log10(gain):+5.1f}dB "
-          f"peak={20*np.log10(np.abs(y).max()):5.1f} {kbps:5.1f}kbps {len(data)//1024}KB")
+    r = L.report(y.astype('float64'), sr)
+    print(f"{name:22s} {mode:4s} start={start:3d}s len={len(y)/sr:5.1f}s swing(before)={swing:4.1f}dB gain={gain_db:+5.1f}dB "
+          f"limiter max={gr_max:4.1f}dB >2dB:{gr_pct:4.1f}%  phone={r['lufs']:6.1f} LRA={r['lra']:4.1f} {kbps:5.1f}kbps {len(data)//1024}KB")

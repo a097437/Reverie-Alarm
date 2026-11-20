@@ -120,13 +120,41 @@ object BuiltInRingtones {
 }
 
 /**
+ * 淡入音量曲線：從幾乎無聲（-40 dB）開始，以 dB 等速上升，人耳聽起來是平均地慢慢變大。
+ * MediaPlayer.setVolume 是線性倍率，直接線性增加的話開頭會「一下子就很大聲」。
+ */
+object VolumeFade {
+    private const val FLOOR_DB = -40f
+    const val TICK_MS = 100L
+
+    /** fraction：0＝剛開始、1＝淡入結束 */
+    fun gainAt(fraction: Float): Float {
+        val p = fraction.coerceIn(0f, 1f)
+        return if (p >= 1f) 1f else Math.pow(10.0, (FLOOR_DB * (1f - p) / 20f).toDouble()).toFloat()
+    }
+}
+
+/**
  * 試聽播放器：和真正響鈴一樣用「鬧鐘音量」與循環播放，試聽聽到的就是響鈴時的效果。
+ * 開頭 2 秒淡入，不會一按下去就很大聲。
  * 同一時間只播一首；再按一次或離開畫面就停止。
  */
 object RingtonePreviewer {
     private var player: MediaPlayer? = null
     var playingUri: String? = null
         private set
+    private const val PREVIEW_FADE_MS = 2000L
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var fadeStart = 0L
+    private val fadeTick = object : Runnable {
+        override fun run() {
+            val mp = player ?: return
+            val frac = (android.os.SystemClock.elapsedRealtime() - fadeStart).toFloat() / PREVIEW_FADE_MS
+            val v = VolumeFade.gainAt(frac)
+            runCatching { mp.setVolume(v, v) }
+            if (frac < 1f) handler.postDelayed(this, VolumeFade.TICK_MS)
+        }
+    }
 
     fun play(context: Context, uriStr: String?): Boolean {
         stop()
@@ -142,6 +170,7 @@ object RingtonePreviewer {
             mp.setDataSource(context.applicationContext, uri)
             mp.isLooping = true
             mp.prepare()
+            VolumeFade.gainAt(0f).let { mp.setVolume(it, it) }
             mp.start()
         }.isSuccess
         if (!ok) {
@@ -150,10 +179,14 @@ object RingtonePreviewer {
         }
         player = mp
         playingUri = uri.toString()
+        fadeStart = android.os.SystemClock.elapsedRealtime()
+        handler.removeCallbacks(fadeTick)
+        handler.postDelayed(fadeTick, VolumeFade.TICK_MS)
         return true
     }
 
     fun stop() {
+        handler.removeCallbacks(fadeTick)
         player?.let { runCatching { it.stop() }; runCatching { it.release() } }
         player = null
         playingUri = null

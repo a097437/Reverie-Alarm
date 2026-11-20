@@ -25,7 +25,7 @@ import java.time.format.DateTimeFormatter
 // ============================================================================
 // 響鈴服務：真正負責「響」的地方
 //   - 前景服務 + 全螢幕通知：鎖屏、App 被關掉也能亮屏跳出畫面
-//   - 鈴聲走「鬧鐘音量」，12 秒內由小到大
+//   - 鈴聲走「鬧鐘音量」，12 秒內從幾乎無聲平順變大（VolumeFade）
 //   - 貪睡會真的排程 N 分鐘後再響；響超過 10 分鐘自動停止
 // ============================================================================
 class AlarmRingService : Service() {
@@ -37,8 +37,8 @@ class AlarmRingService : Service() {
         const val ACTION_CLOSE_UI = "com.reverie.alarm.RING_CLOSE_UI"
         private const val NOTIFICATION_ID = 7301
         private const val AUTO_STOP_MS = 10 * 60 * 1000L
-        private const val FADE_STEPS = 12
-        private const val FADE_STEP_MS = 1000L
+        /** 漸進式音量：12 秒從幾乎無聲平順變大（曲線見 VolumeFade） */
+        private const val FADE_MS = 12_000L
 
         fun canSnooze(spec: AlarmSpec): Boolean = spec.snoozeMinutes > 0 && spec.remainingSnooze > 0
 
@@ -53,16 +53,16 @@ class AlarmRingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var currentSpec: AlarmSpec? = null
     private val handler = Handler(Looper.getMainLooper())
-    private var fadeStep = 0
+    private var fadeStart = 0L
 
     private val autoStopRunnable = Runnable { finishRinging(showToast = false) }
     private val fadeRunnable = object : Runnable {
         override fun run() {
             val mp = mediaPlayer ?: return
-            fadeStep++
-            val vol = (0.15f + 0.85f * fadeStep / FADE_STEPS).coerceAtMost(1f)
+            val frac = (android.os.SystemClock.elapsedRealtime() - fadeStart).toFloat() / FADE_MS
+            val vol = VolumeFade.gainAt(frac)
             runCatching { mp.setVolume(vol, vol) }
-            if (fadeStep < FADE_STEPS) handler.postDelayed(this, FADE_STEP_MS)
+            if (frac < 1f) handler.postDelayed(this, VolumeFade.TICK_MS)
         }
     }
 
@@ -184,15 +184,15 @@ class AlarmRingService : Service() {
                 player.setDataSource(applicationContext, uri)
                 player.isLooping = true
                 player.prepare()
-                val startVol = if (fadeIn) 0.15f else 1f
+                val startVol = if (fadeIn) VolumeFade.gainAt(0f) else 1f
                 player.setVolume(startVol, startVol)
                 player.start()
             }.isSuccess
             if (ok) {
                 mediaPlayer = player
-                fadeStep = 0
+                fadeStart = android.os.SystemClock.elapsedRealtime()
                 handler.removeCallbacks(fadeRunnable)
-                if (fadeIn) handler.postDelayed(fadeRunnable, FADE_STEP_MS)
+                if (fadeIn) handler.postDelayed(fadeRunnable, VolumeFade.TICK_MS)
                 return
             }
             runCatching { player.release() }
