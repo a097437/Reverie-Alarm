@@ -59,13 +59,13 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v2.0.2"
+const val APP_VERSION = "v2.0.3"
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
     var fontScale by mutableFloatStateOf(1f)
 }
-const val APP_BUILD_DATE = "2026.11.20"
+const val APP_BUILD_DATE = "2026.11.21"
 
 data class ThemePalette(
     val title: String,
@@ -714,6 +714,13 @@ private fun SwatchGrid(
 data class ChangelogEntry(val version: String, val date: String, val highlights: List<String>)
 
 val APP_CHANGELOG get() = listOf(
+    ChangelogEntry(
+        "v2.0.3", "2026.11.21", listOf(
+            tr("內建鈴聲換成 11 首授權明確的柔和音樂（鋼琴、木吉他、八音盒），可無縫循環、音量一致"),
+            tr("共享更安全：邀請碼改成 8 碼、可以看到並移除訂閱你的人、可以更換邀請碼；新帳號預設不共享"),
+            tr("AI 快速排班加上每日次數與長度限制、會再檢查 AI 排出的日期，也可以回報不當的 AI 回覆")
+        )
+    ),
     ChangelogEntry(
         "v2.0.2", "2026.11.20", listOf(
             tr("自動檢查更新：打開 App 時（一天一次）會比對 GitHub 上的最新版本，有新版就顯示更新內容，可以直接下載或略過"),
