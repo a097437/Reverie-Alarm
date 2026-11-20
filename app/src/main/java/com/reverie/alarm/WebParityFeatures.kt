@@ -121,11 +121,16 @@ fun formatCountdown(from: LocalDateTime, to: LocalDateTime): String {
 // ---------------------------------------------------------------------------
 private suspend fun loadBitmap(context: Context, uriStr: String, maxSide: Int): Bitmap? = withContext(Dispatchers.IO) {
     runCatching {
+        // 只讀使用者自己挑的外部圖片
+        if (!UriSafety.isExternalContent(context, uriStr)) return@runCatching null
         val uri = Uri.parse(uriStr)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
         var sample = 1
         while (bounds.outWidth / (sample * 2) >= maxSide && bounds.outHeight / (sample * 2) >= maxSide) sample *= 2
+        // 避免超大圖片（解壓縮炸彈）把記憶體吃光
+        if (bounds.outWidth.toLong() * bounds.outHeight / (sample.toLong() * sample) > 40_000_000L) return@runCatching null
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
     }.getOrNull()
@@ -175,9 +180,13 @@ fun ImageLightbox(images: List<ShiftAttachment>, startIndex: Int, theme: ThemePa
             }
             Button(
                 onClick = {
-                    runCatching {
+                    val uriStr = images[pager.currentPage].uriString
+                    // 只把「使用者自己挑的外部檔案」交給別的 App；本 App 自己的檔案或其他網址一律不開
+                    if (!UriSafety.isExternalContent(context, uriStr)) {
+                        AppToast.show(tr("無法開啟這個檔案"))
+                    } else runCatching {
                         context.startActivity(Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(images[pager.currentPage].uriString), "image/*")
+                            setDataAndType(Uri.parse(uriStr), "image/*")
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         })
                     }

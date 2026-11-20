@@ -490,9 +490,16 @@ fun WebAlarmsScreen(
                     val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                     if (c.moveToFirst() && idx >= 0) c.getString(idx) else null
                 }
-            }.getOrNull() ?: tr("匯入音檔")
-            val entry = onImportRingtone(uri, name)
-            importTarget?.let { onSetAlarmRingtone(it, entry) }
+            }.getOrNull()
+            // 只接受真的音檔（MIME 類型或副檔名），名稱限制長度
+            val safeName = ImportGuard.checkAudio(context, uri, name)
+            if (safeName == null) {
+                runCatching { context.contentResolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                AppToast.show(tr("這不是音訊檔，請選擇 mp3、m4a、ogg、wav 等音樂檔"))
+            } else {
+                val entry = onImportRingtone(uri, safeName)
+                importTarget?.let { onSetAlarmRingtone(it, entry) }
+            }
         }
         importTarget = null
     }
@@ -1635,7 +1642,7 @@ fun PublicSchedulePreview(title: String, rows: List<PartnerShift>, theme: ThemeP
         title = {
             Column {
                 Text(title, fontSize = 15.sp, fontWeight = FontWeight.Black, color = theme.textMain)
-                Text(tr("免下載 App・即時唯讀網頁"), fontSize = 11.sp, color = theme.textMuted)
+                Text(tr("唯讀・只顯示日期、班別與上下班時間"), fontSize = 11.sp, color = theme.textMuted)
             }
         },
         text = {

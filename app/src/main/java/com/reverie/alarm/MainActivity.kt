@@ -809,98 +809,40 @@ fun ReverieAlarmApp() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
+            // 備份檔可能來自別人：先完整驗證、整理成乾淨的資料（見 ImportGuard），全部沒問題才一次套用，
+            // 失敗時原本的資料完全不動
             runCatching {
-                val content = context.contentResolver.openInputStream(uri)?.use { input ->
-                    BufferedReader(InputStreamReader(input, Charsets.UTF_8)).readText()
-                } ?: error(tr("無法讀取檔案"))
-                val payload = gson.fromJson(content, FullBackupPayload::class.java)
-                runCatching { MorandiTheme.valueOf(payload.themeName) }.getOrNull()?.let { themePreset = it }
-                appPrefs = payload.preferences
-                partnerSync = payload.partnerSync
+                val content = ImportGuard.readText(context, uri)
+                val clean = ImportGuard.parseBackup(context.packageName, gson, content, today)
 
-                if (payload.templates.isNotEmpty()) {
+                clean.themeName?.let { name -> runCatching { MorandiTheme.valueOf(name) }.getOrNull()?.let { themePreset = it } }
+                appPrefs = clean.prefs
+                partnerSync = clean.partnerSync
+                if (clean.templates.isNotEmpty()) {
                     templates.clear()
-                    payload.templates.forEach { item ->
-                        val parts = item.name.split("|", limit = 4)
-                        if (parts.size == 4) {
-                            templates.add(
-                                ShiftTemplate(
-                                    id = item.id,
-                                    title = parts[1],
-                                    type = runCatching { ShiftType.valueOf(parts[0]) }.getOrDefault(ShiftType.CUSTOM),
-                                    startTime = LocalTime.parse(item.startTime),
-                                    endTime = LocalTime.parse(item.endTime),
-                                    wakeOffsetMinutes = parts[2].toLongOrNull() ?: 90L,
-                                    leaveOffsetMinutes = parts[3].toLongOrNull() ?: 40L,
-                                    isOff = item.isOvernight
-                                )
-                            )
-                        }
-                    }
+                    templates.addAll(clean.templates)
                 }
-
                 alarms.forEach { NativeAlarmScheduler.cancelAlarm(context, it) }
                 events.clear()
-                payload.events.forEach { rec ->
-                    events.add(
-                        ShiftEvent(
-                            date = LocalDate.parse(rec.dateStr),
-                            title = rec.title,
-                            type = runCatching { ShiftType.valueOf(rec.templateId) }.getOrDefault(ShiftType.CUSTOM),
-                            startTime = LocalTime.parse(rec.startTime),
-                            endTime = LocalTime.parse(rec.endTime),
-                            note = rec.note
-                        )
-                    )
-                }
-
+                events.addAll(clean.events)
                 alarms.clear()
-                payload.alarms.forEach { item ->
-                    val parts = item.label.split("|", limit = 3)
-                    if (parts.size == 3) {
-                        val stage = runCatching { AlarmStage.valueOf(parts[1]) }.getOrDefault(AlarmStage.CUSTOM)
-                        val restored = ShiftAlarm(
-                            requestCode = item.id,
-                            date = runCatching { LocalDate.parse(parts[0]) }.getOrDefault(today),
-                            triggerTime = LocalTime.of(item.hour, item.minute),
-                            stage = stage,
-                            label = parts[2],
-                            enabled = item.enabled,
-                            ringtoneUri = item.ringtoneUri,
-                            ringtoneName = item.ringtoneName,
-                            maxSnoozeCount = if (stage == AlarmStage.LEAVE) 0 else item.maxSnoozeCount
-                        )
-                        alarms.add(restored)
-                        NativeAlarmScheduler.scheduleAlarm(context, restored)
-                    }
-                }
-
-                val restoredEventsV2 = payload.eventsV2?.mapNotNull { it.toModel() }
-                val restoredAlarmsV2 = payload.alarmsV2?.mapNotNull { it.toModel() }
-                if (restoredEventsV2 != null && restoredAlarmsV2 != null) {
-                    alarms.forEach { NativeAlarmScheduler.cancelAlarm(context, it) }
-                    events.clear()
-                    events.addAll(restoredEventsV2)
-                    alarms.clear()
-                    alarms.addAll(restoredAlarmsV2)
-                }
-
-                if (payload.ringtoneLibrary.isNotEmpty()) {
-                    ringtoneLibrary.clear()
-                    ringtoneLibrary.addAll(payload.ringtoneLibrary)
-                }
-                // 舊備份裡的系統音效設定換成新的內建鈴聲
-                val mergedRt = BuiltInRingtones.mergeLibrary(context, ringtoneLibrary.toList())
+                alarms.addAll(clean.alarms)
+                // 鈴聲庫：內建鈴聲在前，加上備份裡使用者自己的音檔
+                val mergedRt = BuiltInRingtones.mergeLibrary(context, clean.ringtones)
                 ringtoneLibrary.clear()
                 ringtoneLibrary.addAll(mergedRt)
+                // 舊備份裡的系統音效設定換成新的內建鈴聲
                 appPrefs = BuiltInRingtones.migratePrefs(context, appPrefs)
                 for (i in alarms.indices) alarms[i] = BuiltInRingtones.migrateAlarm(context, alarms[i])
 
-                persistAllData()
+                persistAllData() // 會重新排程所有鬧鐘
                 logEvent(tr("成功從 JSON 還原 {0} 筆排班與 {1} 個鬧鐘", events.size, alarms.size))
-                AppToast.show(tr("✅ 備份還原完成！"))
+                AppToast.show(
+                    if (clean.skipped > 0) tr("✅ 備份還原完成（略過 {0} 筆格式不正確的資料）", clean.skipped)
+                    else tr("✅ 備份還原完成！")
+                )
             }.onFailure {
-                AppToast.show(tr("❌ 還原失敗：格式不相容"))
+                AppToast.show(if (it is ImportException) it.message ?: tr("❌ 還原失敗：格式不相容") else tr("❌ 還原失敗：格式不相容"))
             }
         }
     }
@@ -1412,7 +1354,7 @@ fun ReverieAlarmApp() {
                                 AppToast.show(tr("🎵 已設定鈴聲：{0}", tr(entry.name)))
                             },
                             onImportRingtone = { uri, fileName ->
-                                val entry = RingtoneEntry(name = fileName, uriString = uri.toString(), isBuiltIn = false)
+                                val entry = RingtoneEntry(name = ImportGuard.text(fileName, ImportGuard.MAX_AUDIO_NAME), uriString = uri.toString(), isBuiltIn = false)
                                 ringtoneLibrary.add(entry)
                                 persistAllData()
                                 AppToast.show(tr("🎵 已加入鈴聲庫：{0}", fileName))

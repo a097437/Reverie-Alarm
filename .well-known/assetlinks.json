@@ -1,8 +1,0 @@
-[{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "io.github.a097437.reveriealarm",
-        "sha256_cert_fingerprints": ["4F:B4:57:D7:49:E7:CB:06:6F:7D:D2:A0:74:E4:D4:29:09:21:40:54:3D:45:0F:C0:AD:53:6C:93:80:B8:86:97"]
-      }
-    }]

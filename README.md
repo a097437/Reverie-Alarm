@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./icon-512.png" width="120" height="120" alt="Reverie Alarm Logo" />
+  <img src="./.github/logo.png" width="120" height="120" alt="Reverie Alarm Logo" />
 
   <h1>Reverie Alarm</h1>
 
@@ -7,7 +7,7 @@
     <a href="https://github.com/a097437/Reverie-Alarm/releases">
       <img src="https://img.shields.io/github/v/release/a097437/Reverie-Alarm?label=release&color=2563eb&style=flat-square" alt="Release" />
     </a>
-    <img src="https://img.shields.io/badge/Platform-Android%20%7C%20PWA-3ddc84?style=flat-square" alt="Platform" />
+    <img src="https://img.shields.io/badge/Platform-Android-3ddc84?style=flat-square" alt="Platform" />
     <img src="https://img.shields.io/badge/Offline-離線可用-f59e0b?style=flat-square" alt="Offline" />
   </p>
 
@@ -22,7 +22,7 @@
 * **兩段式強效鬧鐘**：針對不同班別自動對應起床提醒與出門倒數，避免睡過頭。
 * **AI 快速排班**：用聊的、用說的，或拍一張班表照片，就能排好整個月。
 * **天氣結合班表**：出門與下班時段的天氣和帶傘提醒。
-* **離線完整運作**：支援 PWA 與本機資料儲存，無網路環境下依然能查看班表與觸發提醒。
+* **離線完整運作**：班表與鬧鐘存在手機裡，沒有網路時也能查看班表、準時響鈴。
 * **中文／English**：介面可切換繁體中文或英文。
 
 ### v2.0.0 新功能
@@ -41,11 +41,11 @@
 
 ---
 
-###  Android 原生版（Kotlin + Jetpack Compose）
+### 技術與架構（Kotlin + Jetpack Compose）
 
-本儲存庫同時包含網頁版（`index.html`，PWA）與 Android 原生版原始碼（`app/`）。
+本儲存庫是 Reverie Alarm 的 Android 原生 App 原始碼（`app/`）。
 
-**原生版特色**
+**特色**
 
 * **原生鬧鐘引擎**：使用系統精準鬧鐘，鎖屏、App 關閉、重開機後都會準時響鈴；支援貪睡上限與出門倒數禁止貪睡。
 * **內建柔和鈴聲**：11 首授權明確（CC0／CC BY 4.0）的鋼琴、木吉他與八音盒音樂，可無縫循環、音量統一，不刺耳也不會忽大忽小（處理工具：`tools/ringtones/make_tones.py`）。
@@ -62,8 +62,9 @@
 * **App Check**：已接上 Firebase App Check（正式版 Play Integrity，測試版偵錯提供者）。目前主控台是「未強制執行」，上架 Google Play 後再改成「強制執行」，才能擋住拆 APK 直接打 API 的人。
 * **存取控制**：見 `firestore.rules`。班表只有訂閱者名單上的人讀得到，加入名單必須知道目前的邀請碼；所有欄位都有型別與長度限制。
 * **存取控制（續）**：讀取別人的班表要同時符合「對方開著共享」「我在訂閱者名單上」「我用的邀請碼是對方目前的邀請碼」，只知道對方的 UID 讀不到；舊的 6 位數邀請碼一律查不到。
-* **XSS**：Android 版用 Jetpack Compose 顯示純文字，沒有 WebView，也不解析 HTML。網頁版（PWA）的所有文字經過 `escapeHtml`、事件參數經過 `jsArg`，圖片只接受 `data:image`、附件網址擋掉 `javascript:`；匯入的備份檔、localStorage 與雲端資料都先經過 `sanitizeAppData` 驗證格式與長度。
-* **網頁版登入**：使用真正的 Google 登入（Firebase Authentication 彈出視窗），和 Android 版共用同一套共享與安全規則；權限一律由 Firestore 安全規則在伺服器端檢查。網頁上的排班預設不會上傳，要手動開啟「用這個瀏覽器的班表更新分享內容」。
+* **登入**：Google 帳號登入（Credential Manager + Firebase Authentication），權限一律由 Firestore 安全規則在伺服器端檢查。
+* **XSS**：介面用 Jetpack Compose 顯示純文字，沒有 WebView，也不解析 HTML。
+* **匯入安全**（`ImportGuard`）：備份檔先完整驗證、整理好，全部沒問題才一次套用，失敗時原本的資料不動；限制檔案大小、筆數與文字長度。附件與鈴聲只接受手機裡的檔案或內建鈴聲，擋掉指向 App 自身檔案的網址與網路網址；匯入音樂時會確認真的是音訊檔。
 
 **鈴聲音樂來源**
 
@@ -88,7 +89,6 @@
 1. 用 Android Studio 開啟專案根目錄。
 2. 若要使用自己的 Firebase 專案：把下載的 `google-services.json` 放到 `app/`，執行 `python tools/firebase/gen_firebase_values.py`，並把 `firestore.rules` 發布到 Firestore。
    * 要使用 AI 快速排班：在 Firebase 主控台 → **AI Logic** 按「開始使用」並選擇 **Gemini Developer API**。App 不是從 Play 商店安裝時，請在 **App Check → APIs** 把 Firebase AI Logic 設為 **Unenforced**，否則請求會被擋下。
-   * 網頁版要能登入：在 Firebase 主控台 → **Authentication → 設定 → 已授權網域** 加入網頁版的網域（例如 `a097437.github.io`）。
    * 測試版（debug／perfTest）使用 App Check 偵錯提供者：第一次開啟時 logcat 會印出偵錯權杖（搜尋 `DebugAppCheckProvider`），App Check 改成強制執行前，要把它加到 **App Check → 應用程式 → 管理偵錯權杖**。
 3. 選擇 Build Variant：`debug`（開發）或 `perfTest`（最佳化、可直接覆蓋 debug 版安裝）。
 
