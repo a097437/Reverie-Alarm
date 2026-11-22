@@ -632,7 +632,11 @@ object I18nEn {
         "這是舊版的 6 位數邀請碼，請對方更新 App，再把新的 8 碼邀請碼傳給你" to "This is an old 6-digit code. Ask them to update the app and send you the new 8-character code",
         "移除訂閱者？" to "Remove follower?",
         "「{0}」會立刻看不到你的班表。對方之後還是可以用目前的邀請碼重新訂閱；不想讓他再訂閱就更換邀請碼。" to "\"{0}\" will stop seeing your schedule right away. They can follow again with your current code; change the code to prevent that.",
-        // ---------------- v2.0.4／v2.0.3／v2.0.2／v2.0.1／v2.0.0 更新日誌 ----------------
+        // ---------------- v2.5.0／v2.0.4／v2.0.3／v2.0.2／v2.0.1／v2.0.0 更新日誌 ----------------
+        "國定假日：內建 2026–2027 官方行事曆，日曆標紅字；可選「照班表上班」或「見紅就休」，假日永遠不會自己改班表或關鬧鐘" to "Public holidays: the official 2026–2027 calendar in red on your calendar; choose \"Follow my roster\" or \"Off on holidays\". Holidays never change shifts or turn off alarms on their own",
+        "休假日鬧鐘防呆改成逐項勾選、寫出原因、可以復原；大夜班前一晚的起床鬧鐘不會再被誤關" to "Day-off alarm check now lists each alarm with a reason and can be undone; a night shift's wake-up alarm the evening before is never turned off by mistake",
+        "前一晚自動提醒：每晚檢查明天，有忘了關的上班鬧鐘才通知，通知上就能暫停或保留" to "Night-before reminder: checks tomorrow every evening and notifies you only when a work alarm was left on; pause or keep it right from the notification",
+        "新的「工具」分頁：天氣、碼錶、計時、桌面小工具；響鈴畫面往上滑就能關閉，鬧鐘列表顯示多久後響" to "New Tools tab: weather, stopwatch, timer and widgets; swipe up to dismiss a ringing alarm, and the alarm list shows how long until it rings",
         "鈴聲音量統一：11 首在手機喇叭上聽起來一樣大聲，同一首也不再忽大忽小" to "Even ringtone volume: all 11 tones sound equally loud on a phone speaker, without loud and quiet swings",
         "響鈴改成從幾乎無聲開始，12 秒平順變大；試聽也會淡入" to "Alarms now fade in smoothly from near silence over 12 seconds; previews fade in too",
         "匯入備份檔與音樂更安全：先完整檢查再套用，失敗時資料不動，也會擋掉不安全的檔案連結" to "Safer backup and music import: everything is checked before it's applied, nothing changes on failure, and unsafe file links are blocked",

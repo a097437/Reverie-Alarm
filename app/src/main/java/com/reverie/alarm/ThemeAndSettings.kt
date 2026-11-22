@@ -59,7 +59,7 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v2.0.4"
+const val APP_VERSION = "v2.5.0"
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
@@ -749,6 +749,14 @@ private fun SwatchGrid(
 data class ChangelogEntry(val version: String, val date: String, val highlights: List<String>)
 
 val APP_CHANGELOG get() = listOf(
+    ChangelogEntry(
+        "v2.5.0", "2026.11.23", listOf(
+            tr("國定假日：內建 2026–2027 官方行事曆，日曆標紅字；可選「照班表上班」或「見紅就休」，假日永遠不會自己改班表或關鬧鐘"),
+            tr("休假日鬧鐘防呆改成逐項勾選、寫出原因、可以復原；大夜班前一晚的起床鬧鐘不會再被誤關"),
+            tr("前一晚自動提醒：每晚檢查明天，有忘了關的上班鬧鐘才通知，通知上就能暫停或保留"),
+            tr("新的「工具」分頁：天氣、碼錶、計時、桌面小工具；響鈴畫面往上滑就能關閉，鬧鐘列表顯示多久後響")
+        )
+    ),
     ChangelogEntry(
         "v2.0.4", "2026.11.21", listOf(
             tr("鈴聲音量統一：11 首在手機喇叭上聽起來一樣大聲，同一首也不再忽大忽小"),
