@@ -92,4 +92,31 @@ class QuickScheduleParserTest {
         assertTrue(parse("哈囉").problems.single().contains("看不懂"))
         assertTrue(parse("21號").problems.isNotEmpty())
     }
+
+    @Test fun clearDates() {
+        val p = parse("取消25號的夜班")
+        assertEquals(setOf(d(11, 25)), p.clears)
+        assertTrue(p.days.isEmpty())
+        assertTrue(p.problems.isEmpty())
+        assertEquals(nov(21, 22, 23).toSet(), parse("清除21到23號").clears)
+    }
+
+    @Test fun clearWholeMonth() {
+        assertEquals(30, parse("清除這個月的班").clears.size)
+        assertEquals(31, parse("刪除12月的排班").clears.size)
+    }
+
+    @Test fun clearThenSet() {
+        val p = parse("取消25號，26號早班")
+        assertEquals(setOf(d(11, 25)), p.clears)
+        assertEquals(mapOf(d(11, 26) to "早班"), p.days)
+        // 後面又排班的日子不清除
+        val q = parse("清除25到26號，26號晚班")
+        assertEquals(setOf(d(11, 25)), q.clears)
+        assertEquals(mapOf(d(11, 26) to "晚班"), q.days)
+    }
+
+    @Test fun clearNeedsDates() {
+        assertTrue(parse("取消").problems.isNotEmpty())
+    }
 }

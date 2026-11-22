@@ -116,6 +116,8 @@ object Tabler {
     val Umbrella: ImageVector by lazy { icon("umbrella", "M4 12a8 8 0 0 1 16 0z", "M12 12v6a2 2 0 0 0 4 0") }
     val Temperature: ImageVector by lazy { icon("temperature", "M10 13.5a4 4 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5", "M10 9l4 0") }
     val TemperatureSun: ImageVector by lazy { icon("temperature-sun", "M4 13.5a4 4 0 1 0 4 0v-8.5a2 2 0 1 0 -4 0v8.5", "M4 9h4", "M13 16a4 4 0 1 0 0 -8a4.07 4.07 0 0 0 -1 .124", "M13 3v1", "M21 12h1", "M13 20v1", "M19.4 5.6l-.7 .7", "M18.7 17.7l.7 .7") }
+    val Stopwatch: ImageVector by lazy { icon("stopwatch", "M5 13a7 7 0 1 0 14 0a7 7 0 0 0 -14 0z", "M14.5 10.5l-2.5 2.5", "M17 8l1 -1", "M14 3h-4") }
+    val Tool: ImageVector by lazy { icon("tool", "M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5") }
     val Wind: ImageVector by lazy { icon("wind", "M5 8h8.5a2.5 2.5 0 1 0 -2.34 -3.24", "M3 12h15.5a2.5 2.5 0 1 1 -2.34 3.24", "M4 16h5.5a2.5 2.5 0 1 1 -2.34 3.24") }
     val Droplet: ImageVector by lazy { icon("droplet", "M7.502 19.423c2.602 2.105 6.395 2.105 8.996 0c2.602 -2.105 3.262 -5.708 1.566 -8.546l-4.89 -7.26c-.42 -.625 -1.287 -.803 -1.936 -.397a1.376 1.376 0 0 0 -.41 .397l-4.893 7.26c-1.695 2.838 -1.035 6.441 1.567 8.546z") }
     val MapPin: ImageVector by lazy { icon("map-pin", "M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0", "M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z") }

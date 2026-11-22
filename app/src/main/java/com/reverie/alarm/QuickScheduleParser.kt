@@ -15,7 +15,9 @@ data class QuickPlan(
     /** 日期 → 班別名稱（和班別模板的 title 相同） */
     val days: Map<LocalDate, String>,
     /** 看不懂或缺資料的片段，顯示給使用者看 */
-    val problems: List<String>
+    val problems: List<String>,
+    /** 要清除（變成沒排班）的日子：「取消 25 號的班」「清除這個月的班」 */
+    val clears: Set<LocalDate> = emptySet()
 )
 
 object QuickScheduleParser {
@@ -23,6 +25,7 @@ object QuickScheduleParser {
     private const val WD = "[一二三四五六日天]"
     private const val WEEK = "(?:週|星期|禮拜|礼拜|周)"
     private const val TO = "(?:到|至|~|-|－|～)"
+    private val CLEAR = Regex("清除|清空|取消|刪除|删除|刪掉|清掉|拿掉|移除|不排")
 
     /**
      * @param shiftNames 班別模板名稱（例如 早班、晚班、夜班、休假、中班）
@@ -37,9 +40,26 @@ object QuickScheduleParser {
         val problems = mutableListOf<String>()
         var ctx = baseMonth
         var pendingDates: List<LocalDate> = emptyList()
+        val clears = LinkedHashSet<LocalDate>()
 
         val clauses = text.split(Regex("[，,；;。\\n]|然後|另外")).map { it.trim() }.filter { it.isNotEmpty() }
         for (clause in clauses) {
+            // 清除：「取消 25 號的夜班」「清除這個月的班」→ 那幾天的班全部清掉（班別名稱只是描述）
+            if (CLEAR.containsMatchIn(clause)) {
+                val chars = CLEAR.replace(clause) { " ".repeat(it.value.length) }.toCharArray()
+                findShifts(String(chars), aliases).forEach { h -> for (k in h.start until h.end) chars[k] = ' ' }
+                val r = parseDates(String(chars), today, ctx)
+                ctx = r.ctx
+                val dates = when {
+                    r.dates.isNotEmpty() -> r.dates
+                    r.monthOnly -> (1..r.ctx.lengthOfMonth()).map { r.ctx.atDay(it) }
+                    else -> pendingDates
+                }
+                pendingDates = emptyList()
+                if (dates.isEmpty()) problems += "要清除哪幾天的班？"
+                else dates.forEach { explicit.remove(it); clears += it }
+                continue
+            }
             // 依班別名稱把一句切成幾段：「21早班22晚班」→ [21 早班][22 晚班]
             val hits = findShifts(clause, aliases)
             if (hits.isEmpty()) {
@@ -67,7 +87,7 @@ object QuickScheduleParser {
                 when {
                     r.rest -> rest += ctx to name
                     dates.isEmpty() -> problems += "「$name」沒有說是哪幾天"
-                    else -> dates.forEach { explicit.remove(it); explicit[it] = name }
+                    else -> dates.forEach { explicit.remove(it); clears.remove(it); explicit[it] = name }
                 }
             }
         }
@@ -77,10 +97,10 @@ object QuickScheduleParser {
         for ((month, name) in rest) {
             for (d in 1..month.lengthOfMonth()) {
                 val date = month.atDay(d)
-                if (date !in result) result[date] = name
+                if (date !in result && date !in clears) result[date] = name
             }
         }
-        return QuickPlan(result.toSortedMap(), problems)
+        return QuickPlan(result.toSortedMap(), problems, clears.toSortedSet())
     }
 
     // ---------------- 班別名稱 ----------------

@@ -146,10 +146,10 @@ fun Color.readable(min: Double = 5.0): Color = readableOn(LocalSurface.current.b
 /** 班別膠囊：淺色底用深一階文字（同網頁版 text-*-700），深色底用原本的淺色字（text-*-300） */
 fun ShiftType.chipText(lightBg: Boolean): Color = if (!lightBg) badgeText else when (this) {
     ShiftType.EARLY -> Color(0xFF92400E)
-    ShiftType.EVENING -> Color(0xFF4338CA)
-    ShiftType.NIGHT -> Color(0xFF115E59)
+    ShiftType.EVENING -> Color(0xFF1D4ED8)
+    ShiftType.NIGHT -> Color(0xFF7E22CE)
     ShiftType.OFF -> Color(0xFF065F46)
-    ShiftType.CUSTOM -> Color(0xFF1D4ED8)
+    ShiftType.CUSTOM -> Color(0xFF334155)
 }
 
 fun ShiftType.chipBg(lightBg: Boolean): Color = if (lightBg) accentDot.copy(alpha = 0.16f) else badgeBg
@@ -480,9 +480,14 @@ fun SettingsSheet(
     onUpdate: (AppPreferences) -> Unit,
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
+    /** 前一晚提醒：現在檢查一次，回傳有沒有發出通知 */
+    onTestEveningGuard: suspend () -> Boolean = { false },
     onDismiss: () -> Unit
 ) {
     var hexTarget by remember { mutableStateOf<String?>(null) } // "accent" / "cell"
+    val settingsScope = androidx.compose.runtime.rememberCoroutineScope()
+    var eveningResult by remember { mutableStateOf<String?>(null) }
+    var eveningChecking by remember { mutableStateOf(false) }
 
     BottomPanel(palette = palette, onDismiss = onDismiss) {
         PanelHeader(tr("⚙️ 系統與質感主題設定"), tr("莫蘭迪低眩光色盤、日曆習慣、防賴床與資料備份"), tr("完成"), palette, onDismiss)
@@ -622,6 +627,36 @@ fun SettingsSheet(
                 }
                 ToggleRow(tr("休假日／國定假日鬧鐘防呆偵測"), tr("自動偵測隔日休假卻忘記關閉的上班鬧鐘"), prefs.autoHolidaySafeguard, palette) {
                     onUpdate(prefs.copy(autoHolidaySafeguard = it))
+                }
+                ToggleRow(
+                    tr("前一晚自動提醒"),
+                    tr("每天晚上檢查明天，有忘了關的上班鬧鐘才發通知，不用打開 App"),
+                    prefs.eveningGuard, palette
+                ) { onUpdate(prefs.copy(eveningGuard = it)) }
+                if (prefs.eveningGuard) {
+                    Text(tr("提醒時間"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+                    SegmentedPicker(
+                        listOf("20:00", "21:00", "22:00", "23:00").map { it to it },
+                        prefs.eveningGuardTime, palette
+                    ) { onUpdate(prefs.copy(eveningGuardTime = it)) }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        WebButton(
+                            if (eveningChecking) tr("檢查中…") else tr("現在檢查一次"), palette,
+                            filled = false, icon = Tabler.Bell, fontSize = 12.sp, vertical = 8.dp, enabled = !eveningChecking
+                        ) {
+                            eveningChecking = true
+                            eveningResult = null
+                            settingsScope.launch {
+                                val posted = runCatching { onTestEveningGuard() }.getOrDefault(false)
+                                eveningResult = if (posted) tr("已發出通知，下拉通知列看看") else tr("明天沒有要提醒的事")
+                                eveningChecking = false
+                            }
+                        }
+                        eveningResult?.let {
+                            Spacer(Modifier.width(10.dp))
+                            Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
 
@@ -938,47 +973,4 @@ fun AboutAppSheet(
     }
 }
 
-// ============================================================================
-// 5. 休假日鬧鐘防呆提醒（對應網頁版 #holiday-safeguard-modal）
-// ============================================================================
-
-@Composable
-fun HolidaySafeguardDialog(
-    tomorrowLabel: String,
-    holidayName: String,
-    riskyAlarms: List<ShiftAlarm>,
-    palette: ThemePalette,
-    onKeep: () -> Unit,
-    onPauseAll: () -> Unit
-) {
-    val amber = Color(0xFFF59E0B)
-    MotionAlertDialog(
-        onDismissRequest = onKeep,
-        containerColor = palette.bgCard,
-        icon = { Icon(Tabler.AlertTriangle, contentDescription = null, tint = amber.readableOn(palette.bgCard, 3.0), modifier = Modifier.size(30.dp)) },
-        title = { Text(tr("休假日鬧鐘防呆提醒"), fontWeight = FontWeight.ExtraBold, color = palette.textMain) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    tr("偵測到明天（{0}）為「{1}」，但明日仍有 {2} 個開啟中的鬧鐘，是否一鍵暫停？", tomorrowLabel, holidayName, riskyAlarms.size),
-                    fontSize = 12.sp, color = palette.textMain
-                )
-                riskyAlarms.sortedBy { it.triggerTime }.forEach { al ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(palette.bgElevated)
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(trLabel(al.label), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = palette.textMain, modifier = Modifier.weight(1f), maxLines = 1)
-                        Text(al.triggerTime.toString(), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.ExtraBold, color = amber)
-                    }
-                }
-            }
-        },
-        dismissButton = { TextButton(onClick = onKeep) { Text(tr("保持開啟"), color = palette.textMain) } },
-        confirmButton = { TextButton(onClick = onPauseAll) { Text(tr("一鍵暫停明日鬧鐘"), color = amber, fontWeight = FontWeight.ExtraBold) } }
-    )
-}
+// 休假日鬧鐘防呆提醒：改成逐項勾選的 HolidayGuardDialog（HolidayScreens.kt）

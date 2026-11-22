@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
@@ -416,10 +417,24 @@ fun rememberBounceScale(key: Any?, resetKey: Any?): State<Float> {
 object AppToast {
     internal var message by mutableStateOf<String?>(null)
     internal var serial by mutableIntStateOf(0)
+    /** 提示上的按鈕文字（例如「復原」）；沒有按鈕是 null */
+    internal var actionLabel: String? = null
+    private var action: (() -> Unit)? = null
 
-    fun show(text: CharSequence) {
+    fun show(text: CharSequence) = show(text, null, null)
+
+    /** 帶一個按鈕的提示（例如「復原」）：停留久一點；按下去只會執行一次 */
+    fun show(text: CharSequence, actionLabel: String?, onAction: (() -> Unit)?) {
         message = text.toString()
+        this.actionLabel = if (onAction != null) actionLabel else null
+        action = onAction
         serial++
+    }
+
+    internal fun runAction() {
+        val a = action ?: return
+        action = null
+        a()
     }
 }
 
@@ -429,13 +444,15 @@ fun TopToastHost(palette: ThemePalette) {
     val msg = AppToast.message
     var visible by remember { mutableStateOf(false) }
     var shown by remember { mutableStateOf("") }
+    var shownAction by remember { mutableStateOf<String?>(null) }
     // 子頁面打開時才建立的提示氣泡，不要把打開前的舊訊息再顯示一次
     val startSerial = remember { serial }
     LaunchedEffect(serial) {
         if (serial == 0 || serial == startSerial || msg == null) return@LaunchedEffect
         shown = msg
+        shownAction = AppToast.actionLabel
         visible = true
-        delay(2200)
+        delay(if (shownAction != null) 6000 else 2200) // 有「復原」按鈕時多留一點時間
         visible = false
     }
     MotionHost(visible) {
@@ -458,12 +475,28 @@ fun TopToastHost(palette: ThemePalette) {
                     .padding(horizontal = 16.dp, vertical = 11.dp)
             ) {
                 val label = parseIconLabel(shown)
-                IconText(
-                    shown, color = palette.textMain, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    iconTint = leadMarkTint(label.leadMark, palette.accentText).let { c ->
-                        if (label.leadMark == null) palette.textMain else c.readableOn(palette.bgElevated, 3.0)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconText(
+                        shown, color = palette.textMain, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        iconTint = leadMarkTint(label.leadMark, palette.accentText).let { c ->
+                            if (label.leadMark == null) palette.textMain else c.readableOn(palette.bgElevated, 3.0)
+                        },
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    shownAction?.let { act ->
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            act, color = palette.accentText, fontSize = 13.sp, fontWeight = FontWeight.Black,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    AppToast.runAction()
+                                    visible = false
+                                }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
                     }
-                )
+                }
             }
         }
     }

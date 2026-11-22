@@ -35,18 +35,25 @@ class ShiftWidgetProvider : AppWidgetProvider() {
     companion object {
         private const val PREFS = "reverie_widget"
         private const val KEY_SHIFTS = "shifts"
+        private const val KEY_HOLIDAY = "holiday_policy"
         private val gson = Gson()
 
-        /** App 儲存資料時呼叫：保存前後 60 天的班表並刷新小工具 */
-        fun saveSnapshot(context: Context, events: List<ShiftEvent>) {
+        /** App 儲存資料時呼叫：保存前後 60 天的班表、國定假日設定，並刷新小工具 */
+        fun saveSnapshot(context: Context, events: List<ShiftEvent>, holidayPolicy: HolidayPolicy) {
             val today = LocalDate.now()
             val shifts = events
                 .filter { !it.date.isBefore(today.minusDays(1)) && !it.date.isAfter(today.plusDays(60)) }
                 .map { WidgetShift(it.date.toString(), it.title, it.type.name, it.startTime.toString(), it.endTime.toString()) }
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString(KEY_SHIFTS, gson.toJson(shifts.toTypedArray()))
+                .putString(KEY_HOLIDAY, gson.toJson(holidayPolicy))
                 .apply()
             refresh(context)
+        }
+
+        private fun readPolicy(context: Context): HolidayPolicy {
+            val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_HOLIDAY, null) ?: return HolidayPolicy()
+            return runCatching { gson.fromJson(raw, HolidayPolicy::class.java) }.getOrNull() ?: HolidayPolicy()
         }
 
         fun refresh(context: Context) {
@@ -62,20 +69,26 @@ class ShiftWidgetProvider : AppWidgetProvider() {
             return runCatching { gson.fromJson(raw, Array<WidgetShift>::class.java).toList() }.getOrDefault(emptyList())
         }
 
-        private fun describe(shift: WidgetShift?): String = when {
-            shift == null -> tr("尚未排班")
-            shift.type == ShiftType.OFF.name -> tr("{0} · 全天休假", tr(shift.title))
-            else -> "${tr(shift.title)} · ${shift.start.take(5)} - ${shift.end.take(5)}"
+        /** 一天的描述；國定假日加上假日名稱（有排班以排班為準，見紅休的空白假日寫「放假」） */
+        private fun describe(shift: WidgetShift?, date: LocalDate, policy: HolidayPolicy): String {
+            val holiday = policy.holidayOn(date)
+            val base = when {
+                shift == null && policy.isDayOff(date) -> tr("國定假日放假")
+                shift == null -> tr("尚未排班")
+                shift.type == ShiftType.OFF.name -> tr("{0} · 全天休假", tr(shift.title))
+                else -> "${tr(shift.title)} · ${shift.start.take(5)} - ${shift.end.take(5)}"
+            }
+            return if (holiday != null) "$base · ${tr(holiday.short)}" else base
         }
 
         private fun typeColor(shift: WidgetShift?): Int {
             val t = shift?.let { runCatching { ShiftType.valueOf(it.type) }.getOrNull() } ?: return 0xFF94A3B8.toInt()
             return when (t) {
                 ShiftType.EARLY -> 0xFFF59E0B
-                ShiftType.EVENING -> 0xFF6366F1
-                ShiftType.NIGHT -> 0xFF14B8A6
+                ShiftType.EVENING -> 0xFF3B82F6
+                ShiftType.NIGHT -> 0xFFA855F7
                 ShiftType.OFF -> 0xFF10B981
-                ShiftType.CUSTOM -> 0xFF3B82F6
+                ShiftType.CUSTOM -> 0xFF94A3B8
             }.toInt()
         }
 
@@ -97,9 +110,10 @@ class ShiftWidgetProvider : AppWidgetProvider() {
                 R.id.widget_date,
                 "${today.format(DateTimeFormatter.ofPattern("M/d"))} ${I18n.weekday(today.dayOfWeek)}"
             )
-            views.setTextViewText(R.id.widget_today, describe(todayShift))
+            val policy = readPolicy(context)
+            views.setTextViewText(R.id.widget_today, describe(todayShift, today, policy))
             views.setTextColor(R.id.widget_today_dot, typeColor(todayShift))
-            views.setTextViewText(R.id.widget_tomorrow, tr("明日：") + describe(tomorrowShift))
+            views.setTextViewText(R.id.widget_tomorrow, tr("明日：") + describe(tomorrowShift, today.plusDays(1), policy))
 
             if (next == null) {
                 views.setTextViewText(R.id.widget_alarm_time, "--:--")

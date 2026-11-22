@@ -34,6 +34,11 @@ class AlarmRingService : Service() {
         const val ACTION_START = "com.reverie.alarm.RING_START"
         const val ACTION_SNOOZE = "com.reverie.alarm.RING_SNOOZE"
         const val ACTION_DISMISS = "com.reverie.alarm.RING_DISMISS"
+        /** 只有正在響的是指定的鬧鐘（EXTRA_KEY）才停掉：計時器按「完成」時用，不會誤關別的鬧鐘 */
+        const val ACTION_DISMISS_KEY = "com.reverie.alarm.RING_DISMISS_KEY"
+        /** 正在響的鬧鐘 key（沒在響是 null） */
+        @Volatile var ringingKey: String? = null
+            private set
         const val ACTION_CLOSE_UI = "com.reverie.alarm.RING_CLOSE_UI"
         private const val NOTIFICATION_ID = 7301
         private const val AUTO_STOP_MS = 10 * 60 * 1000L
@@ -55,7 +60,10 @@ class AlarmRingService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var fadeStart = 0L
 
-    private val autoStopRunnable = Runnable { finishRinging(showToast = false) }
+    private val autoStopRunnable = Runnable {
+        AppLog.w("Ring", "響了 10 分鐘沒人關，自動停止：${currentSpec?.label}")
+        finishRinging(showToast = false)
+    }
     private val fadeRunnable = object : Runnable {
         override fun run() {
             val mp = mediaPlayer ?: return
@@ -74,6 +82,7 @@ class AlarmRingService : Service() {
             ACTION_START -> {
                 val spec = AlarmEngine.specFromJson(intent.getStringExtra(AlarmEngine.EXTRA_SPEC_JSON))
                 if (spec == null) {
+                    AppLog.w("Ring", "響鈴服務收到壞掉的鬧鐘資料，略過")
                     stopSelf()
                     return START_NOT_STICKY
                 }
@@ -88,16 +97,35 @@ class AlarmRingService : Service() {
                 }
                 finishRinging(showToast = false)
             }
-            ACTION_DISMISS -> finishRinging(showToast = true)
+            ACTION_DISMISS_KEY -> {
+                val key = intent.getStringExtra(AlarmEngine.EXTRA_KEY)
+                if (key != null && currentSpec?.key == key) {
+                    AppLog.i("Ring", "在 App 裡停止響鈴：${currentSpec?.label}")
+                    finishRinging(showToast = false)
+                } else if (currentSpec == null) stopSelf()
+            }
+            ACTION_DISMISS -> {
+                AppLog.i("Ring", "使用者關閉鬧鐘：${currentSpec?.label ?: "（已經沒在響）"}")
+                val wasTimer = currentSpec?.key == CountdownTimerState.ALARM_KEY
+                finishRinging(showToast = true)
+                // 關掉計時器的鈴聲 = 這次計時結束：App 裡回到設定畫面（像系統時鐘）
+                if (wasTimer) runCatching {
+                    CountdownTimerState.load(applicationContext)
+                    CountdownTimerState.reset(applicationContext)
+                }.onFailure { AppLog.w("Ring", "重設計時器失敗", it) }
+            }
             else -> if (currentSpec == null) stopSelf()
         }
         return START_NOT_STICKY
     }
 
     private fun startRinging(spec: AlarmSpec) {
+        AppLog.i("Ring", "開始響鈴：${spec.label}（${if (spec.key.startsWith("preview-")) "試響" else spec.triggerLocal}），淡入=${spec.fadeIn}，" +
+            "全螢幕權限=${AlarmEngine.canUseFullScreen(this)}，鬧鐘音量=${runCatching { (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).getStreamVolume(android.media.AudioManager.STREAM_ALARM) }.getOrNull()}")
         // 如果上一個鬧鐘還在響，先停掉它
         stopSoundAndVibration()
         currentSpec = spec
+        ringingKey = spec.key
 
         AlarmEngine.ensureChannel(this)
         val notification = buildNotification(spec)
@@ -160,7 +188,7 @@ class AlarmRingService : Service() {
             )
             builder.addAction(0, tr("貪睡 {0} 分鐘", spec.snoozeMinutes), snoozePi)
         }
-        builder.addAction(0, tr("關閉鬧鐘"), dismissPi)
+        builder.addAction(0, if (spec.stage == "TIMER") tr("停止") else tr("關閉鬧鐘"), dismissPi)
         return builder.build()
     }
 
@@ -172,9 +200,9 @@ class AlarmRingService : Service() {
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         )
-        for (uri in candidates) {
+        for ((index, uri) in candidates.withIndex()) {
             val player = MediaPlayer()
-            val ok = runCatching {
+            val result = runCatching {
                 player.setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)
@@ -187,8 +215,11 @@ class AlarmRingService : Service() {
                 val startVol = if (fadeIn) VolumeFade.gainAt(0f) else 1f
                 player.setVolume(startVol, startVol)
                 player.start()
-            }.isSuccess
+            }
+            result.exceptionOrNull()?.let { AppLog.w("Ring", "鈴聲播放失敗，改用下一個備援：${uri.toString().substringAfterLast('/').take(60)}", it) }
+            val ok = result.isSuccess
             if (ok) {
+                if (index > 0) AppLog.w("Ring", "使用備援鈴聲（第 ${index + 1} 個）：${uri.toString().substringAfterLast('/').take(60)}")
                 mediaPlayer = player
                 fadeStart = android.os.SystemClock.elapsedRealtime()
                 handler.removeCallbacks(fadeRunnable)
@@ -197,6 +228,7 @@ class AlarmRingService : Service() {
             }
             runCatching { player.release() }
         }
+        AppLog.e("Ring", "所有鈴聲都無法播放，只剩震動")
     }
 
     private fun startVibration() {
@@ -237,9 +269,11 @@ class AlarmRingService : Service() {
         handler.removeCallbacks(autoStopRunnable)
         stopSoundAndVibration()
         if (showToast && currentSpec != null) {
-            Toast.makeText(this, tr("☀️ 鬧鐘已關閉"), Toast.LENGTH_SHORT).show()
+            val msg = if (currentSpec?.key == CountdownTimerState.ALARM_KEY) tr("⏳ 計時已完成") else tr("☀️ 鬧鐘已關閉")
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
         currentSpec = null
+        ringingKey = null
         // 通知響鈴畫面關閉
         sendBroadcast(Intent(ACTION_CLOSE_UI).setPackage(packageName))
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -249,6 +283,7 @@ class AlarmRingService : Service() {
     }
 
     override fun onDestroy() {
+        ringingKey = null
         handler.removeCallbacksAndMessages(null)
         stopSoundAndVibration()
         runCatching { wakeLock?.release() }

@@ -62,7 +62,7 @@ object UpdateChecker {
         val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val today = LocalDate.now().toString()
         if (sp.getString("last_check", null) == today) return
-        val info = runCatching { fetch() }.getOrNull() ?: return // 沒網路就下次再說
+        val info = runCatching { fetch() }.onFailure { AppLog.w("Update", "檢查更新失敗", it) }.getOrNull() ?: return // 沒網路就下次再說
         sp.edit().putString("last_check", today).apply()
         if (isNewer(info.version, APP_VERSION)) {
             newer = info

@@ -118,7 +118,7 @@ object CloudSync {
             } else if (user?.uid != u.uid) {
                 user = CloudUser(u.uid, u.displayName ?: "Reverie 使用者", u.email ?: "")
                 scope.launch {
-                    runCatching { ensureProfile() }
+                    runCatching { ensureProfile() }.onFailure { AppLog.w("Cloud", "讀取帳號資料失敗", it) }
                     listenSubscriptions()
                     pendingEvents?.let { schedulePush(it) }
                 }
@@ -155,7 +155,7 @@ object CloudSync {
             android.util.Log.w("RACloud", "signIn no credential", e)
             return tr("這支手機上沒有可用的 Google 帳號，請先到系統設定新增帳號")
         } catch (e: Exception) {
-            android.util.Log.w("RACloud", "signIn failed", e)
+            AppLog.w("Cloud", "登入失敗", e)
             return tr("登入失敗：") + (e.message ?: e.javaClass.simpleName)
         } finally {
             busy = false
@@ -347,6 +347,7 @@ object CloudSync {
             repairTried.remove(ownerUid)
             null
         } catch (e: FirebaseFirestoreException) {
+            AppLog.w("Cloud", "訂閱失敗：${e.code.name}")
             when {
                 e.code == FirebaseFirestoreException.Code.UNAVAILABLE -> tr("目前沒有網路，請連線後再試")
                 e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED && isLegacyCode(code) -> tr("這是舊版的 6 位數邀請碼，請對方更新 App，再把新的 8 碼邀請碼傳給你")

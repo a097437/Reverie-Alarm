@@ -93,10 +93,11 @@ enum class ShiftType(
     val accentDot: Color
 ) {
     EARLY("早班", Color(0x33F59E0B), Color(0xFFFCD34D), Color(0xFFF59E0B)),
-    EVENING("晚班", Color(0x336366F1), Color(0xFFA5B4FC), Color(0xFF6366F1)),
-    NIGHT("夜班", Color(0x3314B8A6), Color(0xFF5EEAD4), Color(0xFF14B8A6)),
+    // 色相刻意拉開：早班琥珀、晚班藍、夜班紫、休假綠、日程灰（夜班原本的青綠色和休假的綠色太像）
+    EVENING("晚班", Color(0x333B82F6), Color(0xFF93C5FD), Color(0xFF3B82F6)),
+    NIGHT("夜班", Color(0x33A855F7), Color(0xFFD8B4FE), Color(0xFFA855F7)),
     OFF("休假", Color(0x3310B981), Color(0xFF6EE7B7), Color(0xFF10B981)),
-    CUSTOM("日程", Color(0x333B82F6), Color(0xFF93C5FD), Color(0xFF3B82F6))
+    CUSTOM("日程", Color(0x3394A3B8), Color(0xFFCBD5E1), Color(0xFF94A3B8))
 }
 
 data class ShiftTemplate(
@@ -176,6 +177,14 @@ data class AppPreferences(
     val noSnoozeOnLeave: Boolean = true,
     val fadeInVolume: Boolean = true,
     val autoHolidaySafeguard: Boolean = true,
+    // ---- 國定假日（規則見 HolidayRules.kt）----
+    val holidayLabels: Boolean = true,          // 日曆標示國定假日
+    val holidayMode: String = "roster",         // roster＝照班表（輪班制）／office＝見紅休（一般上班族）
+    val holidayIncludeMakeUp: Boolean = true,   // 見紅休：政府的補假日也放
+    val holidaySkipInBatch: Boolean = true,     // 見紅休：批次／AI 排班略過放假的國定假日
+    // ---- 休假防呆：前一晚自動提醒（見 EveningGuard.kt）----
+    val eveningGuard: Boolean = true,           // 每天晚上檢查明天，有衝突才發通知
+    val eveningGuardTime: String = "21:00",     // 檢查時間
     val autoCheckUpdate: Boolean = true,
     // ---- 介面動態效果 ----
     val animationsEnabled: Boolean = true,
@@ -335,6 +344,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         I18n.ensure(applicationContext)
         AppSecurity.installAppCheck(applicationContext) // 要在任何 Firebase 請求之前
+        ToolNav.fromIntent(intent) // 從碼錶／計時的通知點進來
+        GuardBridge.fromIntent(intent) // 從前一晚提醒的通知點進來
+        runCatching { ToolNotifications.restore(applicationContext) } // 還在跑的碼錶／計時把通知補回來
         // 動畫速度由 App 內「介面動態效果」決定，不受手機「開發者選項 → 動畫縮放 = 關閉」影響
         // （系統縮放為 0 時，Compose 預設會讓所有動畫瞬間完成）
         val ctx = androidx.compose.ui.platform.AndroidUiDispatcher.Main + AppMotionDurationScale
@@ -356,6 +368,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        ToolNav.fromIntent(intent) // 從碼錶／計時的通知點進來
+        GuardBridge.fromIntent(intent) // 從前一晚提醒的通知點進來
+    }
+
     override fun onDestroy() {
         appRecomposer?.cancel()
         appRecomposer = null
@@ -370,7 +389,16 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ReverieAlarmApp() {
     val context = LocalContext.current
-    val today = remember { LocalDate.now() }
+    // 「今天」：App 放在背景過了午夜，回到前景時換成新的一天（休假防呆檢查的是「明天」）
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    val appLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(appLifecycle) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) LocalDate.now().let { if (it != today) today = it }
+        }
+        appLifecycle.addObserver(obs)
+        onDispose { appLifecycle.removeObserver(obs) }
+    }
     val repository = remember { AppRepository(context) }
     val coroutineScope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -392,6 +420,7 @@ fun ReverieAlarmApp() {
         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
         runtimeLogs.add("[$stamp] $msg")
         if (runtimeLogs.size > 300) runtimeLogs.removeAt(0)
+        AppLog.i("App", msg) // 同時寫進手機裡的診斷日誌（重開 App 也還在）
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -430,7 +459,9 @@ fun ReverieAlarmApp() {
     }
     var showAboutSheet by remember { mutableStateOf(false) }
     var showSafeguard by remember { mutableStateOf(false) }
-    var safeguardDismissKey by remember { mutableStateOf("") }
+    // 按過「全部保留」的那組問題（存在手機裡，重開 App 也不會再問）
+    var safeguardDismissKey by remember { mutableStateOf(GuardPrefs.dismissed(context)) }
+    var showHolidaySheet by remember { mutableStateOf(false) }
     var partnerSync by remember { mutableStateOf(PartnerSyncState()) }
     var viewMode by remember { mutableStateOf(CalendarViewMode.MONTH) }
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -462,7 +493,17 @@ fun ReverieAlarmApp() {
     var showPreferencesDialog by remember { mutableStateOf(false) }
     var showChangelogDialog by remember { mutableStateOf(false) }
     var showSharingPage by remember { mutableStateOf(false) }
-    var showWidgetPage by remember { mutableStateOf(false) }
+    // 「工具」分頁目前顯示哪個模組（天氣／碼錶／桌面小工具）
+    var toolSection by remember { mutableStateOf(ToolNav.last(context)) }
+    // 從通知點進來：切到「工具」分頁的那個工具
+    LaunchedEffect(ToolNav.pending) {
+        ToolNav.pending?.let { s ->
+            toolSection = s
+            ToolNav.save(context, s)
+            selectedTab = 3
+            ToolNav.pending = null
+        }
+    }
     var lightboxImages by remember { mutableStateOf<List<ShiftAttachment>>(emptyList()) }
     var lightboxIndex by remember { mutableIntStateOf(0) }
     var editingTemplateTarget by remember { mutableStateOf<ShiftTemplate?>(null) }
@@ -545,7 +586,8 @@ fun ReverieAlarmApp() {
             NativeAlarmScheduler.rules = prefsSnapshot
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 NativeAlarmScheduler.syncAll(context.applicationContext, currentAlarms)
-                ShiftWidgetProvider.saveSnapshot(context.applicationContext, currentEvents)
+                ShiftWidgetProvider.saveSnapshot(context.applicationContext, currentEvents, prefsSnapshot.holidayPolicy())
+                EveningGuard.schedule(context.applicationContext, prefsSnapshot) // 前一晚提醒（設定改了就重排）
             }
             // 已登入就把公開欄位（日期、班別、時間）同步到雲端
             CloudSync.schedulePush(currentEvents)
@@ -688,17 +730,28 @@ fun ReverieAlarmApp() {
         )
     }
 
-    /** AI 快速排班：只改有變動的日子，排好後跳到日曆的第一天 */
-    fun applySchedulePlan(plan: Map<LocalDate, ShiftTemplate>) {
+    /** AI 快速排班：只改有變動的日子、清除要清除的日子（連同那天的兩段鬧鐘），完成後跳到日曆的第一天 */
+    fun applySchedulePlan(plan: Map<LocalDate, ShiftTemplate>, clears: Set<LocalDate> = emptySet()) {
         val changed = plan.filter { (d, tpl) -> events.firstOrNull { it.date == d }?.title != tpl.title }
+        val toClear = clears.filter { d -> d !in plan && events.any { it.date == d } }
+        toClear.forEach { d ->
+            val ids = events.filter { it.date == d }.map { it.id }
+            alarms.filter { it.eventId in ids }.forEach { NativeAlarmScheduler.cancelAlarm(context, it) }
+            events.removeAll { it.date == d }
+            alarms.removeAll { it.eventId in ids }
+            logEvent(tr("AI 排班：清除 {0}", d))
+        }
         changed.forEach { (d, tpl) -> applyTemplateToDate(d, tpl, autoSave = false) }
         persistAllData()
-        changed.keys.minOrNull()?.let { first ->
+        (changed.keys + toClear).minOrNull()?.let { first ->
             currentYearMonth = YearMonth.from(first)
             selectedDate = first
         }
         selectedTab = 0
-        AppToast.show(tr("✅ 已排好 {0} 天的班與鬧鐘", changed.size))
+        AppToast.show(
+            if (toClear.isEmpty()) tr("✅ 已排好 {0} 天的班與鬧鐘", changed.size)
+            else tr("✅ 已排好 {0} 天、清除 {1} 天", changed.size, toClear.size)
+        )
     }
 
     /** 改單一鬧鐘（時間、開關）並重新排程 */
@@ -717,32 +770,50 @@ fun ReverieAlarmApp() {
         persistAllData()
     }
 
-    fun importTaiwanHolidays2026() {
-        val holidays2026 = listOf(
-            LocalDate.of(2026, 1, 1) to "元旦國定休假",
-            LocalDate.of(2026, 2, 16) to "除夕春節休假",
-            LocalDate.of(2026, 2, 17) to "大年初一休假",
-            LocalDate.of(2026, 2, 18) to "大年初二休假",
-            LocalDate.of(2026, 2, 19) to "大年初三休假",
-            LocalDate.of(2026, 2, 28) to "和平紀念日休假",
-            LocalDate.of(2026, 4, 4) to "兒童節休假",
-            LocalDate.of(2026, 4, 5) to "清明節休假",
-            LocalDate.of(2026, 5, 1) to "勞動節休假",
-            LocalDate.of(2026, 6, 19) to "端午節休假",
-            LocalDate.of(2026, 9, 25) to "中秋節休假",
-            LocalDate.of(2026, 10, 10) to "國慶日休假"
-        )
+    /**
+     * 把幾天的上班改成休假（那天的上班鬧鐘一起移除，備註與附件保留），不會自己存檔。
+     * 回傳「復原」要做的事：放回原本的班和鬧鐘。
+     * 國定假日本身不會呼叫這裡（不寫進班表）；只有使用者在防呆視窗或國定假日面板勾選確認後才會改。
+     */
+    fun convertShiftsToOff(targets: List<ShiftEvent>): () -> Unit {
         val offTpl = templates.firstOrNull { it.isOff } ?: defaultTemplates[3]
-        var count = 0
-        holidays2026.forEach { (hDate, hLabel) ->
-            if (events.none { it.date == hDate }) {
-                applyTemplateToDate(hDate, offTpl, hLabel, autoSave = false)
-                count++
-            }
+        val before = targets.mapNotNull { t -> events.firstOrNull { it.id == t.id } }
+        val beforeAlarms = alarms.filter { a -> before.any { it.id == a.eventId } }
+        before.forEach { ev ->
+            upsertShift(
+                date = ev.date, title = offTpl.title, type = ShiftType.OFF, start = offTpl.startTime, end = offTpl.endTime,
+                wakeOffset = 0, leaveOffset = 0, note = ev.note, attachments = ev.attachments,
+                regenerateAlarms = true, autoSave = false
+            )
         }
+        val createdIds = before.mapNotNull { ev -> events.firstOrNull { it.date == ev.date }?.id }
+        return {
+            events.removeAll { it.id in createdIds }
+            before.forEach { ev ->
+                events.removeAll { it.date == ev.date }
+                events.add(ev)
+            }
+            beforeAlarms.forEach { a ->
+                if (alarms.none { it.id == a.id }) {
+                    alarms.add(a)
+                    NativeAlarmScheduler.scheduleAlarm(context, a)
+                }
+            }
+            logEvent(tr("復原：{0} 天改回原本的班", before.size))
+        }
+    }
+
+    /** 國定假日面板：勾選的國定假日上班改成休假，提示可以「復原」 */
+    fun convertHolidayShiftsToOff(targets: List<ShiftEvent>) {
+        if (targets.isEmpty()) return
+        val undo = convertShiftsToOff(targets)
         persistAllData()
-        logEvent(tr("匯入國定假日：新增 {0} 筆", count))
-        AppToast.show(tr("🇹🇼 已匯入 2026 台灣國定假日（新增 {0} 筆，不覆蓋既有班表）", count))
+        logEvent(tr("國定假日：{0} 天上班改成休假", targets.size))
+        AppToast.show(tr("🌿 已把 {0} 天改成休假，那天的上班鬧鐘一起關掉", targets.size), tr("復原")) {
+            undo()
+            persistAllData()
+            AppToast.show(tr("✅ 已復原"))
+        }
     }
 
     // 備份與還原 Launcher
@@ -837,11 +908,13 @@ fun ReverieAlarmApp() {
 
                 persistAllData() // 會重新排程所有鬧鐘
                 logEvent(tr("成功從 JSON 還原 {0} 筆排班與 {1} 個鬧鐘", events.size, alarms.size))
+                if (clean.skipped > 0) AppLog.w("Import", "備份還原：略過 ${clean.skipped} 筆格式不正確的資料")
                 AppToast.show(
                     if (clean.skipped > 0) tr("✅ 備份還原完成（略過 {0} 筆格式不正確的資料）", clean.skipped)
                     else tr("✅ 備份還原完成！")
                 )
             }.onFailure {
+                AppLog.w("Import", "備份還原失敗", it)
                 AppToast.show(if (it is ImportException) it.message ?: tr("❌ 還原失敗：格式不相容") else tr("❌ 還原失敗：格式不相容"))
             }
         }
@@ -852,14 +925,26 @@ fun ReverieAlarmApp() {
     ) { uri ->
         if (uri != null) {
             runCatching {
-                val report = buildString {
-                    appendLine(tr("=== Reverie Alarm 原生運行診斷日誌 ==="))
-                    appendLine(tr("匯出時間：{0}", LocalDateTime.now()))
-                    appendLine(tr("總排班筆數：{0} | 總鬧鐘數：{1}", events.size, alarms.size))
-                    appendLine(tr("目前主題：{0} | 週一起始：{1}", themePreset.name, appPrefs.weekStartsOnMonday))
-                    appendLine("----------------------------------------")
-                    runtimeLogs.forEach { appendLine(it) }
+                // App 目前的資料摘要（不含備註內容、附件與 Email）
+                val now = LocalDateTime.now()
+                val appState = buildString {
+                    val sorted = events.sortedBy { it.date }
+                    appendLine("排班：${events.size} 天（${sorted.firstOrNull()?.date ?: "-"} ～ ${sorted.lastOrNull()?.date ?: "-"}）；" +
+                        events.groupingBy { it.type }.eachCount().entries.joinToString("、") { "${it.key.name} ${it.value}" })
+                    appendLine("班別模板：" + templates.joinToString("；") { "${it.title}(${it.type.name}${if (it.isOff) "/休" else ""} ${it.startTime}-${it.endTime} 起床-${it.wakeOffsetMinutes} 出門-${it.leaveOffsetMinutes})" })
+                    val future = alarms.filter { it.enabled && LocalDateTime.of(it.date, it.triggerTime).isAfter(now) }.sortedBy { LocalDateTime.of(it.date, it.triggerTime) }
+                    appendLine("鬧鐘：共 ${alarms.size} 個，開啟 ${alarms.count { it.enabled }} 個，未來會響 ${future.size} 個")
+                    future.take(15).forEach { appendLine("  - ${it.date} ${it.triggerTime} ${it.stage.name} ${it.label.take(30)}  鈴聲=${it.ringtoneName}  貪睡上限=${it.maxSnoozeCount}") }
+                    appendLine("設定：漸進音量=${appPrefs.fadeInVolume}、貪睡上限=${appPrefs.maxSnoozeCount}、出門禁止貪睡=${appPrefs.noSnoozeOnLeave}、" +
+                        "休假防呆=${appPrefs.autoHolidaySafeguard}、自動檢查更新=${appPrefs.autoCheckUpdate}、主題=${themePreset.name}/${appPrefs.colorMode}、" +
+                        "語言=${if (I18n.isEn) "English" else "中文"}、週一起始=${appPrefs.weekStartsOnMonday}")
+                    appendLine("鈴聲庫：${ringtoneLibrary.size} 首（自己匯入 ${ringtoneLibrary.count { !it.isBuiltIn }} 首）；預設起床=${appPrefs.defaultWakeRingtoneName}、出門=${appPrefs.defaultLeaveRingtoneName}")
+                    appendLine("雲端：${if (CloudSync.user != null) "已登入" else "未登入"}、共享=${CloudSync.profile?.publicLinkEnabled ?: "-"}、" +
+                        "訂閱 ${CloudSync.subscriptions.size} 個、訂閱我的人 ${CloudSync.readers.size} 個")
+                    appendLine("這次開啟 App 的畫面紀錄：")
+                    runtimeLogs.takeLast(100).forEach { appendLine("  $it") }
                 }
+                val report = AppLog.buildReport(context, appState)
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     out.write(report.toByteArray(Charsets.UTF_8))
                 }
@@ -1060,32 +1145,116 @@ fun ReverieAlarmApp() {
     }
 
     val tomorrow = today.plusDays(1)
-    val isTomorrowOff = events.any { it.date == tomorrow && it.type == ShiftType.OFF }
-    val tomorrowRiskyAlarms = if (isTomorrowOff) {
-        alarms.filter { it.date == tomorrow && it.enabled }
-    } else emptyList()
-
-    val safeguardKey = "$tomorrow|${tomorrowRiskyAlarms.size}"
-    LaunchedEffect(safeguardKey, appPrefs.autoHolidaySafeguard) {
-        if (appPrefs.autoHolidaySafeguard && tomorrowRiskyAlarms.isNotEmpty() && safeguardDismissKey != safeguardKey) {
+    val holidayPolicy = appPrefs.holidayPolicy()
+    // 明天的休假防呆（規則見 HolidayRules.kt）：有排班就以排班為準、鬧鐘看歸屬不看日期、只建議不自動關
+    val guard = HolidayGuard.check(tomorrow, LocalDateTime.now(), events, alarms, holidayPolicy)
+    // 有要確認的事，而且不是已經按過「全部保留」的同一組
+    val guardPending = guard.attention.isNotEmpty() && guard.attentionKey != safeguardDismissKey
+    LaunchedEffect(guard.attentionKey, safeguardDismissKey, appPrefs.autoHolidaySafeguard) {
+        if (appPrefs.autoHolidaySafeguard && guardPending) {
             kotlinx.coroutines.delay(900)
             showSafeguard = true
         }
     }
 
-    fun pauseTomorrowRiskyAlarms() {
-        var count = 0
-        tomorrowRiskyAlarms.forEach { al ->
-            val idx = alarms.indexOfFirst { it.id == al.id }
-            if (idx != -1) {
+    fun rememberGuardDismissed(key: String) {
+        if (key.isEmpty()) return
+        safeguardDismissKey = key
+        GuardPrefs.setDismissed(context, key)
+    }
+
+    /** 防呆視窗：「全部保留」（或點外面關掉）＝這組問題不再追問 */
+    fun keepAllGuard() {
+        showSafeguard = false
+        rememberGuardDismissed(guard.attentionKey)
+        if (guard.attention.isNotEmpty()) EveningGuard.cancelNotice(context) // 前一晚提醒的通知也收掉
+    }
+
+    /** 防呆視窗：只處理勾選的項目（暫停鬧鐘、國定假日上班改成休假），提示可以「復原」 */
+    fun applyGuard(selected: List<GuardItem>) {
+        val fullKey = guard.attentionKey
+        val paused = mutableListOf<String>()
+        selected.filter { it.kind != GuardKind.HOLIDAY_SHIFT }.flatMap { it.alarms }.forEach { a ->
+            val idx = alarms.indexOfFirst { it.id == a.id }
+            if (idx != -1 && alarms[idx].enabled) {
                 val updated = alarms[idx].copy(enabled = false)
                 alarms[idx] = updated
                 NativeAlarmScheduler.cancelAlarm(context, updated)
-                count++
+                paused += updated.id
             }
         }
+        val shiftsOff = selected.filter { it.kind == GuardKind.HOLIDAY_SHIFT }.mapNotNull { it.event }
+        val undoOff = if (shiftsOff.isNotEmpty()) convertShiftsToOff(shiftsOff) else null
         persistAllData()
-        AppToast.show(tr("🛡️ 已為您一鍵暫停明日 {0} 個上班鬧鐘，祝您休假愉快！", count))
+        showSafeguard = false
+        EveningGuard.cancelNotice(context) // 已經在 App 裡處理了，前一晚提醒的通知收掉
+        // 沒勾的＝決定保留：剩下的那組不再追問
+        rememberGuardDismissed(guard.attentionKeyWithout(selected))
+        logEvent(tr("休假防呆：暫停 {0} 個鬧鐘、{1} 天改成休假", paused.size, shiftsOff.size))
+        val msg = when {
+            shiftsOff.isEmpty() -> tr("🛡️ 已暫停 {0} 個鬧鐘", paused.size)
+            paused.isEmpty() -> tr("🛡️ 已把 {0} 天改成休假，那天的鬧鐘一起關掉", shiftsOff.size)
+            else -> tr("🛡️ 已暫停 {0} 個鬧鐘、{1} 天改成休假", paused.size, shiftsOff.size)
+        }
+        AppToast.show(msg, tr("復原")) {
+            paused.forEach { id ->
+                val idx = alarms.indexOfFirst { it.id == id }
+                if (idx != -1) {
+                    val updated = alarms[idx].copy(enabled = true)
+                    alarms[idx] = updated
+                    NativeAlarmScheduler.scheduleAlarm(context, updated)
+                }
+            }
+            undoOff?.invoke()
+            persistAllData()
+            rememberGuardDismissed(fullKey) // 復原了就是決定保留，不要馬上又跳出來
+            logEvent(tr("休假防呆：復原"))
+            AppToast.show(tr("✅ 已復原"))
+        }
+    }
+
+    // 前一晚提醒的通知按鈕：App 開著時由這裡改資料，畫面和存檔才會一致（見 EveningGuard.kt）
+    DisposableEffect(Unit) {
+        GuardBridge.host = object : GuardBridge.Host {
+            override fun events(): List<ShiftEvent> = events.toList()
+            override fun alarms(): List<ShiftAlarm> = alarms.toList()
+            override fun prefs(): AppPreferences = appPrefs
+            override fun setAlarmsEnabled(ids: Collection<String>, enabled: Boolean): Int {
+                var changed = 0
+                for (i in alarms.indices) {
+                    val a = alarms[i]
+                    if (a.id in ids && a.enabled != enabled) {
+                        val updated = a.copy(enabled = enabled)
+                        alarms[i] = updated
+                        NativeAlarmScheduler.scheduleAlarm(context, updated)
+                        changed++
+                    }
+                }
+                if (changed > 0) {
+                    persistAllData()
+                    logEvent(tr("前一晚提醒：{0} {1} 個鬧鐘", if (enabled) tr("恢復") else tr("暫停"), changed))
+                }
+                return changed
+            }
+            override fun markDismissed(key: String) = rememberGuardDismissed(key)
+            override fun toast(text: String) = AppToast.show(text)
+        }
+        onDispose { GuardBridge.host = null }
+    }
+    // 點前一晚提醒的通知進來：直接打開防呆視窗
+    LaunchedEffect(GuardBridge.openRequested) {
+        if (GuardBridge.openRequested) {
+            GuardBridge.openRequested = false
+            selectedTab = 0
+            showSafeguard = true
+        }
+    }
+
+    // 日曆上方的提醒列（按過「全部保留」就收起來）
+    val guardBanner: String? = when {
+        !guardPending -> null
+        guard.attention.any { it.defaultChecked } -> tr("⚠️ 明天休假，但還有 {0} 個上班鬧鐘開著", guard.attention.count { it.defaultChecked })
+        else -> guard.day.event?.let { ev -> tr("🇹🇼 明天是{0}，你排了{1}，要照常上班嗎？", tr(guard.day.holiday?.name ?: ""), tr(ev.title)) }
     }
 
     MaterialTheme(colorScheme = colorScheme) {
@@ -1102,7 +1271,8 @@ fun ReverieAlarmApp() {
                     isCalendarTab = selectedTab == 0,
                     accountEmail = CloudSync.user?.email,
                     accentHex = appPrefs.customAccentHex,
-                    conflictCount = tomorrowRiskyAlarms.size,
+                    guard = guard,
+                    holidayPolicy = holidayPolicy,
                     autoCheckUpdate = appPrefs.autoCheckUpdate,
                     palette = currentTheme,
                     subscriptions = partnerSync.subscriptionList(today),
@@ -1133,14 +1303,9 @@ fun ReverieAlarmApp() {
                     onOpenSearch = { showSearchDialog = true },
                     onOpenAccount = { showSharingPage = true },
                     onOpenSharing = { showSharingPage = true },
-                    onRunSafeguardCheck = {
-                        if (tomorrowRiskyAlarms.isEmpty()) {
-                            AppToast.show(tr("🛡️ 防呆檢測通過：明日無休假與上班鬧鐘衝突！"))
-                        } else {
-                            showSafeguard = true
-                        }
-                    },
-                    onImportHolidays = { importTaiwanHolidays2026() },
+                    // 手動檢測：一律打開視窗，沒有衝突時也列出明天哪些鬧鐘會照常響
+                    onRunSafeguardCheck = { showSafeguard = true },
+                    onOpenHolidays = { showHolidaySheet = true },
                     onOpenSettings = { showPreferencesDialog = true },
                     onOpenAbout = { showAboutSheet = true },
                     onCloseDrawer = { coroutineScope.launch { drawerState.close() } }
@@ -1156,17 +1321,33 @@ fun ReverieAlarmApp() {
                         selectedDate = selectedDate,
                         showBatchButton = selectedTab == 0 && viewingOwnerCode == null,
                         batchMode = batchMode,
-                        safeguardAlert = tomorrowRiskyAlarms.isNotEmpty(),
+                        safeguardAlert = guard.attention.isNotEmpty(),
                         theme = currentTheme,
                         showMoreMenu = showMoreMenu,
                         onToggleMoreMenu = { showMoreMenu = it },
                         onOpenDrawer = { coroutineScope.launch { drawerState.open() } },
-                        onPrev = { currentYearMonth = currentYearMonth.minusMonths(1) },
-                        onNext = { currentYearMonth = currentYearMonth.plusMonths(1) },
+                        // 週／日視圖時，頂部箭頭改成上一週／下一週（上一天／下一天）
+                        onPrev = {
+                            when {
+                                selectedTab == 0 && viewMode == CalendarViewMode.WEEK -> selectedDate = selectedDate.minusWeeks(1)
+                                selectedTab == 0 && viewMode == CalendarViewMode.DAY -> selectedDate = selectedDate.minusDays(1)
+                                else -> currentYearMonth = currentYearMonth.minusMonths(1)
+                            }
+                            if (selectedTab == 0 && (viewMode == CalendarViewMode.WEEK || viewMode == CalendarViewMode.DAY)) currentYearMonth = YearMonth.from(selectedDate)
+                        },
+                        onNext = {
+                            when {
+                                selectedTab == 0 && viewMode == CalendarViewMode.WEEK -> selectedDate = selectedDate.plusWeeks(1)
+                                selectedTab == 0 && viewMode == CalendarViewMode.DAY -> selectedDate = selectedDate.plusDays(1)
+                                else -> currentYearMonth = currentYearMonth.plusMonths(1)
+                            }
+                            if (selectedTab == 0 && (viewMode == CalendarViewMode.WEEK || viewMode == CalendarViewMode.DAY)) currentYearMonth = YearMonth.from(selectedDate)
+                        },
                         onToday = {
                             currentYearMonth = YearMonth.from(today)
                             selectedDate = today
-                            viewMode = CalendarViewMode.MONTH
+                            // 週／日視圖時留在原本的檢視，只跳回今天
+                            if (viewMode != CalendarViewMode.WEEK && viewMode != CalendarViewMode.DAY) viewMode = CalendarViewMode.MONTH
                         },
                         onToggleBatch = {
                             batchMode = !batchMode
@@ -1175,7 +1356,7 @@ fun ReverieAlarmApp() {
                         onSearch = { showSearchDialog = true },
                         onAddShift = { showEditSheet = true },
                         onAddAlarm = { showAddAlarmDialog = true },
-                        onOpenWidgets = { showWidgetPage = true }
+                        onOpenWidgets = { toolSection = ToolSection.WIDGETS; selectedTab = 3 }
                     )
                     // 唯讀共享日曆警示橫幅（網頁版 shared-readonly-banner）
                     if (viewingOwnerCode != null) {
@@ -1230,7 +1411,7 @@ fun ReverieAlarmApp() {
                         0 -> {
                             if (viewMode == CalendarViewMode.MONTH) {
                                 CalendarScreen(
-                                    onOpenWeather = { selectedTab = 3 },
+                                    onOpenWeather = { toolSection = ToolSection.WEATHER; selectedTab = 3 },
                                     yearMonth = currentYearMonth,
                                     today = today,
                                     selectedDate = selectedDate,
@@ -1239,7 +1420,8 @@ fun ReverieAlarmApp() {
                                     alarms = if (viewingOwnerCode != null) emptyList() else alarms,
                                     readOnly = viewingOwnerCode != null,
                                     batchSelectedDates = batchSelectedDates,
-                                    tomorrowConflictCount = tomorrowRiskyAlarms.size,
+                                    guardBanner = if (viewingOwnerCode != null) null else guardBanner,
+                                    holidayPolicy = holidayPolicy,
                                     partnerOffDates = partnerSync.compareOffDates(today),
                                     weekStartsOnMonday = appPrefs.weekStartsOnMonday,
                                     fontScale = 1f, // 字級已由全域縮放處理
@@ -1247,18 +1429,8 @@ fun ReverieAlarmApp() {
                                     effectiveAccent = effectiveAccent,
                                     effectiveCardBg = effectiveCardBg,
                                     onMonthChange = { currentYearMonth = it },
-                                    onPauseTomorrowAlarms = {
-                                        tomorrowRiskyAlarms.forEach { al ->
-                                            val idx = alarms.indexOfFirst { it.id == al.id }
-                                            if (idx != -1) {
-                                                val updated = alarms[idx].copy(enabled = false)
-                                                alarms[idx] = updated
-                                                NativeAlarmScheduler.cancelAlarm(context, updated)
-                                            }
-                                        }
-                                        persistAllData()
-                                        AppToast.show(tr("🛡️ 已一鍵暫停明日休假日上班鬧鐘"))
-                                    },
+                                    // 提醒列只打開防呆視窗，逐項確認，不會一鍵全關
+                                    onOpenGuard = { showSafeguard = true },
                                     onDateClick = { clickedDate ->
                                         if (viewingOwnerCode != null) {
                                             selectedDate = clickedDate
@@ -1313,11 +1485,28 @@ fun ReverieAlarmApp() {
                                     yearMonth = currentYearMonth,
                                     events = displayEvents,
                                     alarms = if (viewingOwnerCode != null) emptyList() else alarms,
+                                    holidayPolicy = holidayPolicy,
                                     theme = currentTheme,
                                     onSelectDateAndSwitchMonth = { targetDate ->
                                         selectedDate = targetDate
                                         currentYearMonth = YearMonth.from(targetDate)
                                         viewMode = CalendarViewMode.MONTH
+                                    },
+                                    weekStartsOnMonday = appPrefs.weekStartsOnMonday,
+                                    onDateChange = { d ->
+                                        selectedDate = d
+                                        currentYearMonth = YearMonth.from(d)
+                                    },
+                                    onOpenDay = { d ->
+                                        selectedDate = d
+                                        currentYearMonth = YearMonth.from(d)
+                                        viewMode = CalendarViewMode.DAY
+                                    },
+                                    onEditDate = { d ->
+                                        selectedDate = d
+                                        currentYearMonth = YearMonth.from(d)
+                                        // 看別人的班表時唯讀，只選取日期
+                                        if (viewingOwnerCode == null) showEditSheet = true
                                     }
                                 )
                             }
@@ -1382,7 +1571,8 @@ fun ReverieAlarmApp() {
                             defaultWakeOffset = appPrefs.defaultWakeOffset,
                             defaultLeaveOffset = appPrefs.defaultLeaveOffset,
                             theme = currentTheme,
-                            onImportHolidays = { importTaiwanHolidays2026() },
+                            holidaySummary = holidaySummary(holidayPolicy),
+                            onOpenHolidays = { showHolidaySheet = true },
                             onUpdateTemplate = { tpl ->
                                 val idx = templates.indexOfFirst { it.id == tpl.id }
                                 if (idx != -1) {
@@ -1402,15 +1592,36 @@ fun ReverieAlarmApp() {
                             }
                         )
 
-                        3 -> WeatherScreen(theme = currentTheme, events = events, alarms = alarms)
+                        3 -> ToolsScreen(
+                            section = toolSection,
+                            theme = currentTheme,
+                            onSectionChange = { toolSection = it; ToolNav.save(context, it) },
+                            weather = { WeatherScreen(theme = currentTheme, events = events, alarms = alarms) },
+                            stopwatch = { StopwatchScreen(currentTheme) },
+                            timer = { TimerScreen(currentTheme) },
+                            widgets = {
+                                WidgetsPreviewScreen(
+                                    todayShift = events.firstOrNull { it.date == today },
+                                    tomorrowShift = events.firstOrNull { it.date == today.plusDays(1) },
+                                    nextAlarm = LocalDateTime.now().let { now ->
+                                        alarms.filter { it.enabled && LocalDateTime.of(it.date, it.triggerTime).isAfter(now) }
+                                            .minByOrNull { LocalDateTime.of(it.date, it.triggerTime) }
+                                    },
+                                    theme = currentTheme,
+                                    effectiveAccent = effectiveAccent,
+                                    showTitle = false
+                                )
+                            }
+                        )
 
                         4 -> AiScheduleScreen(
                             state = aiChat,
                             templates = templates,
                             events = events,
                             baseMonth = currentYearMonth,
+                            holidayPolicy = holidayPolicy,
                             theme = currentTheme,
-                            onApply = { plan -> applySchedulePlan(plan) }
+                            onApply = { plan, clears -> applySchedulePlan(plan, clears) }
                         )
                     }
                     }
@@ -1460,12 +1671,27 @@ fun ReverieAlarmApp() {
                                                     if (batchSelectedDates.isEmpty()) {
                                                         AppToast.show(tr("請先點選日曆上的日期"))
                                                     } else {
-                                                        val count = batchSelectedDates.size
-                                                        batchSelectedDates.forEach { d -> applyTemplateToDate(d, tpl, autoSave = false) }
+                                                        // 見紅休：上班的班別先略過放假的國定假日，提示上可以一鍵加回
+                                                        val isWork = !tpl.isOff && tpl.type.isWorkShift
+                                                        val skipped = if (isWork) batchSelectedDates.filter { holidayPolicy.skipsShiftOn(it) }.sorted() else emptyList()
+                                                        val targets = batchSelectedDates.filter { it !in skipped }
+                                                        targets.forEach { d -> applyTemplateToDate(d, tpl, autoSave = false) }
                                                         persistAllData()
                                                         batchSelectedDates.clear()
                                                         batchMode = false
-                                                        AppToast.show(tr("⚡ 已批次排入 {0} 天「{1}」", count, tr(tpl.title)))
+                                                        if (skipped.isEmpty()) {
+                                                            AppToast.show(tr("⚡ 已批次排入 {0} 天「{1}」", targets.size, tr(tpl.title)))
+                                                        } else {
+                                                            AppToast.show(
+                                                                if (targets.isEmpty()) tr("⚡ 選的 {0} 天都是國定假日，先略過了", skipped.size)
+                                                                else tr("⚡ 已排入 {0} 天「{1}」，略過 {2} 天國定假日", targets.size, tr(tpl.title), skipped.size),
+                                                                tr("也排假日")
+                                                            ) {
+                                                                skipped.forEach { d -> applyTemplateToDate(d, tpl, autoSave = false) }
+                                                                persistAllData()
+                                                                AppToast.show(tr("⚡ 國定假日也排入「{0}」（{1} 天）", tr(tpl.title), skipped.size))
+                                                            }
+                                                        }
                                                     }
                                                 }
                                                 .padding(vertical = 8.dp),
@@ -1508,6 +1734,7 @@ fun ReverieAlarmApp() {
             val dayAlarms = alarms.filter { it.date == editDate }.sortedBy { it.triggerTime }
             DateEditSheet(
                 date = editDate,
+                holiday = holidayPolicy.holidayOn(editDate),
                 event = currentEv,
                 dayAlarms = dayAlarms,
                 templates = templates,
@@ -1529,7 +1756,11 @@ fun ReverieAlarmApp() {
                 },
                 onClearDay = {
                     val oldIds = events.filter { it.date == editDate }.map { it.id }
-                    val toRemove = alarms.filter { it.eventId in oldIds || it.date == editDate }
+                    // 這天的班的鬧鐘＋這天響、不屬於任何現有班的鬧鐘；
+                    // 這天晚上響、但屬於隔天大夜班的起床鬧鐘不能一起刪（鬧鐘看歸屬，不看日期）
+                    val toRemove = alarms.filter { a ->
+                        a.eventId in oldIds || (a.date == editDate && (a.eventId == null || events.none { it.id == a.eventId }))
+                    }
                     toRemove.forEach { NativeAlarmScheduler.cancelAlarm(context, it) }
                     events.removeAll { it.date == editDate }
                     alarms.removeAll { al -> toRemove.any { it.id == al.id } }
@@ -1568,26 +1799,6 @@ fun ReverieAlarmApp() {
                 theme = currentTheme,
                 onDismiss = { lightboxImages = emptyList() }
             )
-        }
-
-        // 系統與質感主題設定（對應網頁版設定頁）
-        // 桌面小工具（從右上角「⋮」打開的全螢幕頁面）
-        MotionHost(showWidgetPage) {
-            MotionFullscreen(onDismiss = { showWidgetPage = false }) {
-                SubPageScaffold(title = tr("桌面小工具"), theme = currentTheme, onBack = { showWidgetPage = false }) {
-                    WidgetsPreviewScreen(
-                        todayShift = events.firstOrNull { it.date == today },
-                        tomorrowShift = events.firstOrNull { it.date == today.plusDays(1) },
-                        nextAlarm = LocalDateTime.now().let { now ->
-                            alarms.filter { it.enabled && LocalDateTime.of(it.date, it.triggerTime).isAfter(now) }
-                                .minByOrNull { LocalDateTime.of(it.date, it.triggerTime) }
-                        },
-                        theme = currentTheme,
-                        effectiveAccent = effectiveAccent,
-                        showTitle = false
-                    )
-                }
-            }
         }
 
         // 共享帳號（從側邊欄打開的全螢幕頁面）
@@ -1631,6 +1842,12 @@ fun ReverieAlarmApp() {
                 },
                 onExportBackup = { exportJsonLauncher.launch("ReverieAlarm_Backup_${today}.json") },
                 onImportBackup = { importJsonLauncher.launch(arrayOf("application/json")) },
+                // 前一晚提醒：現在檢查一次（和晚上自動檢查走同一條路）
+                onTestEveningGuard = {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        EveningGuard.runCheck(context.applicationContext)
+                    }
+                },
                 onDismiss = { showPreferencesDialog = false }
             )
         }
@@ -1656,22 +1873,40 @@ fun ReverieAlarmApp() {
             UpdateChecker.available?.let { UpdateDialog(it, currentTheme, context) }
         }
 
-        // 休假日鬧鐘防呆
-        MotionHost(showSafeguard && tomorrowRiskyAlarms.isNotEmpty()) {
-            HolidaySafeguardDialog(
-                tomorrowLabel = tomorrow.toString(),
-                holidayName = events.firstOrNull { it.date == tomorrow && it.type == ShiftType.OFF }?.title ?: tr("排定休假"),
-                riskyAlarms = tomorrowRiskyAlarms,
+        // 休假日鬧鐘防呆：逐項勾選、寫清楚原因（關閉動畫期間用最後一次的內容撐住）
+        val guardHolder = remember { arrayOfNulls<GuardReport>(1) }
+        if (showSafeguard) guardHolder[0] = guard
+        MotionHost(showSafeguard) {
+            (if (showSafeguard) guard else guardHolder[0])?.let { report ->
+                HolidayGuardDialog(
+                    report = report,
+                    palette = currentTheme,
+                    onKeepAll = { keepAllGuard() },
+                    onApply = { applyGuard(it) },
+                    onEditDay = { d ->
+                        showSafeguard = false
+                        selectedDate = d
+                        currentYearMonth = YearMonth.from(d)
+                        selectedTab = 0
+                        showEditSheet = true
+                    }
+                )
+            }
+        }
+
+        // 國定假日設定面板（側邊欄、班別模板頁都從這裡進來）
+        MotionHost(showHolidaySheet) {
+            HolidaySettingsSheet(
+                prefs = appPrefs,
+                events = events,
+                today = today,
                 palette = currentTheme,
-                onKeep = {
-                    showSafeguard = false
-                    safeguardDismissKey = safeguardKey
+                onUpdate = { updated ->
+                    appPrefs = updated
+                    persistAllData()
                 },
-                onPauseAll = {
-                    pauseTomorrowRiskyAlarms()
-                    showSafeguard = false
-                    safeguardDismissKey = safeguardKey
-                }
+                onConvertToOff = { convertHolidayShiftsToOff(it) },
+                onDismiss = { showHolidaySheet = false }
             )
         }
 
@@ -1714,7 +1949,8 @@ fun ReverieAlarmApp() {
                 theme = currentTheme,
                 onAdd = { date, time, label, stage, snoozeMin, ringtone ->
                     val newAl = ShiftAlarm(
-                        eventId = events.firstOrNull { it.date == date }?.id?.takeIf { stage != AlarmStage.CUSTOM },
+                        // 只掛在上班或行程上；休假日自己加的鬧鐘不掛在休假上，防呆才不會把它當成「忘了關的上班鬧鐘」
+                        eventId = events.firstOrNull { it.date == date && it.type != ShiftType.OFF }?.id?.takeIf { stage != AlarmStage.CUSTOM },
                         date = date,
                         triggerTime = time,
                         stage = stage,
@@ -1767,7 +2003,9 @@ fun CalendarScreen(
     events: List<ShiftEvent>,
     alarms: List<ShiftAlarm>,
     batchSelectedDates: List<LocalDate>,
-    tomorrowConflictCount: Int,
+    /** 日曆上方的休假防呆提醒列（null＝不顯示） */
+    guardBanner: String?,
+    holidayPolicy: HolidayPolicy,
     partnerOffDates: List<String>,
     weekStartsOnMonday: Boolean,
     fontScale: Float,
@@ -1776,7 +2014,7 @@ fun CalendarScreen(
     effectiveCardBg: Color,
     onMonthChange: (YearMonth) -> Unit,
     onOpenWeather: () -> Unit = {},
-    onPauseTomorrowAlarms: () -> Unit,
+    onOpenGuard: () -> Unit,
     onDateClick: (LocalDate) -> Unit,
     onDismissQuickCapsule: () -> Unit,
     onOpenEditSheet: () -> Unit,
@@ -1844,7 +2082,11 @@ fun CalendarScreen(
                         val cellEvent = events.firstOrNull { it.date == cellDate }
                         val hasActiveAlarm = inMonth && alarms.any { it.date == cellDate && it.enabled }
                         val hasNote = !cellEvent?.note.isNullOrBlank() || !cellEvent?.attachments.isNullOrEmpty()
-                        val isMutualOff = inMonth && cellEvent?.type == ShiftType.OFF && partnerOffDates.contains(cellDate.toString())
+                        // 國定假日：紅字＋假日名稱（有排班時名稱讓給班別，以排班為準）
+                        val holiday = if (inMonth) holidayPolicy.holidayOn(cellDate) else null
+                        // 我這天放假（我排的休假，或見紅休的國定假日）＋對方也休
+                        val isMutualOff = inMonth && partnerOffDates.contains(cellDate.toString()) &&
+                            DayResolver.resolve(cellDate, events, holidayPolicy).isOff
                         val gridBg = effectiveCardBg
                         val light = theme.isCalCellLight
 
@@ -1859,7 +2101,7 @@ fun CalendarScreen(
                         val numberColor = when {
                             isSelected -> Color.White
                             isToday -> effectiveAccent.readableOn(surfaceBg, 4.5)
-                            dow == java.time.DayOfWeek.SUNDAY -> ROSE.readableOn(surfaceBg, 4.5)
+                            holiday != null || dow == java.time.DayOfWeek.SUNDAY -> ROSE.readableOn(surfaceBg, 4.5)
                             dow == java.time.DayOfWeek.SATURDAY -> Color(0xFF3B82F6).readableOn(surfaceBg, 4.5)
                             else -> theme.calCellText.readableOn(surfaceBg, 4.5)
                         }
@@ -1907,12 +2149,13 @@ fun CalendarScreen(
                                     fontWeight = if (isSelected || isToday) FontWeight.Black else FontWeight.Bold,
                                     lineHeight = (21 * fontScale).sp
                                 )
-                                // 數字下方：班別名稱（沒排班就留白，讓數字保持同一高度）
+                                // 數字下方：班別名稱；沒排班的國定假日顯示假日名稱（紅字）；都沒有就留白，讓數字保持同一高度
                                 Text(
-                                    text = cellEvent?.title?.let { shortShiftName(it) } ?: " ",
+                                    text = cellEvent?.title?.let { shortShiftName(it) } ?: holiday?.let { tr(it.short) } ?: " ",
                                     color = when {
-                                        cellEvent == null -> Color.Transparent
+                                        cellEvent == null && holiday == null -> Color.Transparent
                                         isSelected -> Color.White.copy(alpha = 0.92f)
+                                        cellEvent == null -> ROSE.readableOn(surfaceBg, 4.5)
                                         else -> cellEvent.type.chipText(light).readableOn(surfaceBg, 4.5)
                                     },
                                     fontSize = (11 * fontScale).sp,
@@ -1979,6 +2222,7 @@ fun CalendarScreen(
     }
 
     val selectedEvent = events.firstOrNull { it.date == selectedDate }
+    val selectedStatus = DayResolver.resolve(selectedDate, events, holidayPolicy)
     val selectedDayAlarms = alarms.filter { it.date == selectedDate }.sortedBy { it.triggerTime }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
     val shortTimeFormatter = remember { DateTimeFormatter.ofPattern("HH") }
@@ -2022,7 +2266,7 @@ fun CalendarScreen(
             }
         }
 
-        if (tomorrowConflictCount > 0) {
+        if (guardBanner != null) {
             item {
                 Row(
                     modifier = Modifier
@@ -2030,19 +2274,21 @@ fun CalendarScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color(0x33F59E0B))
                         .border(1.dp, Color(0x66F59E0B), RoundedCornerShape(16.dp))
+                        .clickable { onOpenGuard() }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     IconText(
-                        text = tr("⚠️ 明日為休假但仍有 {0} 個上班鬧鐘開啟", tomorrowConflictCount),
+                        text = guardBanner,
                         color = Color(0xFFFCD34D).readable(),
                         fontSize = (12 * fontScale).sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f)
                     )
-                    TextButton(onClick = onPauseTomorrowAlarms, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                        Text(tr("一鍵暫停"), color = Color(0xFFFBBF24).readable(), fontWeight = FontWeight.Black, fontSize = 12.sp)
+                    // 只打開防呆視窗逐項確認，不會一鍵全關
+                    TextButton(onClick = onOpenGuard, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Text(tr("查看"), color = Color(0xFFFBBF24).readable(), fontWeight = FontWeight.Black, fontSize = 12.sp)
                     }
                 }
             }
@@ -2120,9 +2366,18 @@ fun CalendarScreen(
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(selectedDate.toString(), color = theme.textMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, softWrap = false)
+                                selectedStatus.holiday?.let { h ->
+                                    Spacer(Modifier.width(6.dp))
+                                    WebPill(tr(h.name), ROSE, fontSize = 9.sp)
+                                }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (selectedEvent != null) {
+                                if (selectedEvent == null && selectedStatus.kind == DayKind.HOLIDAY_OFF) {
+                                    // 見紅休：沒排班的國定假日＝放假
+                                    Icon(Tabler.Leaf, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(15.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(tr("國定假日放假"), color = theme.textMain, fontSize = 14.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false)
+                                } else if (selectedEvent != null) {
                                     Icon(selectedEvent.type.icon(), contentDescription = null, tint = theme.textMain, modifier = Modifier.size(15.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text(tr(selectedEvent.title), color = theme.textMain, fontSize = 14.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false)
@@ -2366,11 +2621,7 @@ fun WidgetsPreviewScreen(todayShift: ShiftEvent?, tomorrowShift: ShiftEvent?, ne
     }
     fun dotColor(s: ShiftEvent?): Color = when (s?.type) {
         null -> Color(0xFF94A3B8)
-        ShiftType.EARLY -> Color(0xFFF59E0B)
-        ShiftType.EVENING -> Color(0xFF6366F1)
-        ShiftType.NIGHT -> Color(0xFF14B8A6)
-        ShiftType.OFF -> Color(0xFF10B981)
-        ShiftType.CUSTOM -> Color(0xFF3B82F6)
+        else -> s.type.accentDot
     }
 
     LazyColumn(

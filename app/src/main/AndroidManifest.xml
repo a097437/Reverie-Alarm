@@ -27,6 +27,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
+        android:name=".ReverieApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -40,6 +41,16 @@
         <!-- 時間到 -->
         <receiver
             android:name=".AlarmReceiver"
+            android:exported="false" />
+
+        <!-- 碼錶／計時通知上的按鈕 -->
+        <receiver
+            android:name=".ToolActionReceiver"
+            android:exported="false" />
+
+        <!-- 休假防呆：前一晚自動檢查、通知上的按鈕 -->
+        <receiver
+            android:name=".GuardReceiver"
             android:exported="false" />
 
         <!-- 開機／更新／改時間後重新排程 -->

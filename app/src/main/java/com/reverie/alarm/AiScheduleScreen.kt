@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -93,9 +94,14 @@ class AiChatState {
     val messages = mutableStateListOf<AiMessage>()
     val turns = mutableListOf<AiTurn>()
     var plan by mutableStateOf<Map<LocalDate, String>>(emptyMap())
+    /** 要清除（變成沒排班）的日子 */
+    var clears by mutableStateOf<Set<LocalDate>>(emptySet())
     var busy by mutableStateOf(false)
-    fun reset() { messages.clear(); turns.clear(); plan = emptyMap(); busy = false }
+    fun reset() { messages.clear(); turns.clear(); plan = emptyMap(); clears = emptySet(); busy = false }
 }
+
+/** AI 回覆像是在說「已經改好了」 */
+private val CLAIMS_DONE = Regex("已(經)?(幫你)?(排|改|清|取消|刪|處理|完成|更新|設定|套用)|好了|完成|搞定|改好|排好|清除了|取消了|刪除了|\\b(done|updated|cleared|removed|changed)\\b", RegexOption.IGNORE_CASE)
 
 /** 範例句（中文原文）。登入時交給 AI，英文模式顯示英文；沒登入時手機上的解析只懂中文，所以顯示中文 */
 private val AI_EXAMPLES = listOf("21 到 25 號早班，26 號休假", "下週一三五晚班", "這個月週六日休假，其他早班")
@@ -107,8 +113,9 @@ fun AiScheduleScreen(
     templates: List<ShiftTemplate>,
     events: List<ShiftEvent>,
     baseMonth: YearMonth,
+    holidayPolicy: HolidayPolicy,
     theme: ThemePalette,
-    onApply: (Map<LocalDate, ShiftTemplate>) -> Unit
+    onApply: (Map<LocalDate, ShiftTemplate>, Set<LocalDate>) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -128,7 +135,13 @@ fun AiScheduleScreen(
             ?: templates.firstOrNull { shift.contains(it.title) || it.title.contains(shift) }
             ?: if (shift.contains("休") || shift.equals("off", true)) offTpl else null
     val resolved = state.plan.mapNotNull { (d, s) -> matchTemplate(s)?.let { d to it } }
-    val changes = resolved.count { (d, tpl) -> events.firstOrNull { it.date == d }?.title != tpl.title }
+    // 見紅休：上班的班別遇到放假的國定假日先略過（預覽裡標出來，可以一鍵加回）
+    var includeHolidays by remember(state.plan) { mutableStateOf(false) }
+    val holidaySkips = resolved.filter { (d, tpl) -> !tpl.isOff && tpl.type.isWorkShift && holidayPolicy.skipsShiftOn(d) }.map { it.first }.toSet()
+    val applied = if (includeHolidays) resolved else resolved.filter { it.first !in holidaySkips }
+    // 清除：只算真的有排班的日子
+    val clearing = state.clears.filter { d -> d !in state.plan && events.any { it.date == d } }.sorted()
+    val changes = applied.count { (d, tpl) -> events.firstOrNull { it.date == d }?.title != tpl.title } + clearing.size
 
     // ---- 照片、語音 ----
     val camFile = remember { File(context.cacheDir, "camera").apply { mkdirs() }.let { File(it, "roster.jpg") } }
@@ -163,10 +176,11 @@ fun AiScheduleScreen(
     // ---- 送出 ----
     fun localParse(text: String, note: String? = null) {
         val p = QuickScheduleParser.parse(text, templates.map { it.title }, offTpl?.title, LocalDate.now(), baseMonth)
-        state.plan = state.plan + p.days
+        state.plan = (state.plan - p.clears) + p.days
+        state.clears = (state.clears - p.days.keys) + p.clears
         val msg = buildString {
             if (note != null) append(note).append("\n")
-            if (p.days.isNotEmpty()) append(tr("好的，整理出 {0} 天，確認下面的預覽沒問題就按「套用」。", p.days.size))
+            if (p.days.isNotEmpty() || p.clears.isNotEmpty()) append(tr("好的，整理出 {0} 天，確認下面的預覽沒問題就按「套用」。", p.days.size + p.clears.size))
             else append(tr("我看不太懂這句，可以換個說法，例如「21 到 25 號早班」。"))
             p.problems.forEach { append("\n・").append(it) }
         }
@@ -195,14 +209,20 @@ fun AiScheduleScreen(
         AiGuard.record(context, img != null)
         scope.launch {
             try {
-                val system = AiSchedule.systemPrompt(templates, LocalDate.now(), baseMonth, user?.name, AiPrefs.rosterName(context))
+                val system = AiSchedule.systemPrompt(templates, LocalDate.now(), baseMonth, user?.name, AiPrefs.rosterName(context), events)
                 val r = AiSchedule.send(context, system, state.turns.toList())
                 state.turns += AiTurn(false, r.raw) // 留著完整的 JSON，下一輪修正時 Gemini 才知道目前的清單
                 state.plan = r.days
+                state.clears = r.clear
                 if (r.person.isNotBlank()) AiPrefs.setRosterName(context, r.person)
                 val unmatched = r.days.filter { (_, s) -> matchTemplate(s) == null }
-                val extra = if (unmatched.isEmpty()) "" else
-                    tr("\n・對不上班別、不會套用：") + unmatched.entries.joinToString("、") { (d, s) -> "${d.monthValue}/${d.dayOfMonth}「$s」" }
+                val effective = r.days.count { (d, s) -> matchTemplate(s)?.let { tpl -> events.firstOrNull { it.date == d }?.title != tpl.title } == true } +
+                    r.clear.count { d -> events.any { it.date == d } }
+                val extra = buildString {
+                    if (unmatched.isNotEmpty()) append(tr("\n・對不上班別、不會套用：") + unmatched.entries.joinToString("、") { (d, s) -> "${d.monthValue}/${d.dayOfMonth}「$s」" })
+                    // AI 說「好了」但其實沒有任何變動時，直接講清楚，避免誤以為已經改了
+                    if (effective == 0 && CLAIMS_DONE.containsMatchIn(r.reply)) append(tr("\n・這次沒有要變動的日子，班表沒有改。"))
+                }
                 state.messages += AiMessage(false, r.reply + extra, report = AiReportDraft(prompt = text, reply = r.reply))
             } catch (e: AiException) {
                 AiGuard.refund(context, img != null) // 沒拿到回覆不算次數
@@ -292,25 +312,54 @@ fun AiScheduleScreen(
                     }
                 }
             }
-            if (resolved.isNotEmpty() && !state.busy) {
+            if ((resolved.isNotEmpty() || clearing.isNotEmpty()) && !state.busy) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PlanPreview(resolved, events, theme, changes)
+                        PlanPreview(resolved, clearing, events, theme, changes, holidayPolicy, if (includeHolidays) emptySet() else holidaySkips)
+                        if (holidaySkips.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(ROSE.copy(alpha = 0.08f))
+                                    .border(1.dp, ROSE.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+                                    .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconText(
+                                    if (includeHolidays) tr("🇹🇼 {0} 天國定假日也會排上班", holidaySkips.size)
+                                    else tr("🇹🇼 {0} 天是放假的國定假日，套用時略過", holidaySkips.size),
+                                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.textMain, modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    if (includeHolidays) tr("改回略過") else tr("也排假日"),
+                                    fontSize = 12.sp, fontWeight = FontWeight.Black, color = theme.accentText,
+                                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { includeHolidays = !includeHolidays }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(if (changes > 0) theme.accent.darkenForWhiteText() else theme.bgElevated)
                                 .clickable(enabled = changes > 0) {
-                                    onApply(resolved.toMap())
-                                    state.messages += AiMessage(false, tr("已套用 {0} 天，兩段式鬧鐘也排好了 ✅", changes))
-                                    state.plan = emptyMap(); state.turns.clear()
+                                    onApply(applied.toMap(), clearing.toSet())
+                                    state.messages += AiMessage(false,
+                                        if (changes == clearing.size) tr("已清除 {0} 天的班與鬧鐘 ✅", changes)
+                                        else tr("已套用 {0} 天，兩段式鬧鐘也排好了 ✅", changes))
+                                    state.plan = emptyMap(); state.clears = emptySet(); state.turns.clear()
                                 }
                                 .padding(vertical = 14.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                if (changes > 0) tr("套用 {0} 天（同時排好兩段式鬧鐘）", changes) else tr("沒有需要變動的日子"),
+                                when {
+                                    changes == 0 -> tr("沒有需要變動的日子")
+                                    changes == clearing.size -> tr("套用：清除 {0} 天的班與鬧鐘", changes)
+                                    else -> tr("套用 {0} 天（同時排好兩段式鬧鐘）", changes)
+                                },
                                 fontSize = 14.sp, fontWeight = FontWeight.Black, color = if (changes > 0) Color.White else theme.textMuted
                             )
                         }
@@ -462,15 +511,23 @@ private fun AiBubble(m: AiMessage, theme: ThemePalette, onReport: (AiReportDraft
     }
 }
 
-/** 排班預覽：每一天原本 → 新的班別；不變的變淡、過去的標「已過」 */
+/** 排班預覽：每一天原本 → 新的班別；不變的變淡、過去的標「已過」、國定假日標紅字、略過的劃掉 */
 @Composable
-fun PlanPreview(resolved: List<Pair<LocalDate, ShiftTemplate>>, events: List<ShiftEvent>, theme: ThemePalette, changes: Int) {
+fun PlanPreview(
+    resolved: List<Pair<LocalDate, ShiftTemplate>>,
+    clearing: List<LocalDate>,
+    events: List<ShiftEvent>,
+    theme: ThemePalette,
+    changes: Int,
+    holidayPolicy: HolidayPolicy = HolidayPolicy(enabled = false),
+    skipped: Set<LocalDate> = emptySet()
+) {
     val today = LocalDate.now()
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(tr("預覽"), fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
             Spacer(Modifier.width(8.dp))
-            Text(tr("共 {0} 天・會變動 {1} 天", resolved.size, changes), fontSize = 12.sp, color = theme.textMuted)
+            Text(tr("共 {0} 天・會變動 {1} 天", resolved.size + clearing.size, changes), fontSize = 12.sp, color = theme.textMuted)
         }
         Spacer(Modifier.height(6.dp))
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(theme.bgElevated)) {
@@ -478,20 +535,60 @@ fun PlanPreview(resolved: List<Pair<LocalDate, ShiftTemplate>>, events: List<Shi
                 if (i > 0) HorizontalDivider(color = theme.borderColor.copy(alpha = 0.5f))
                 val old = events.firstOrNull { it.date == d }
                 val same = old?.title == tpl.title
+                val skip = d in skipped
+                val holiday = holidayPolicy.holidayOn(d)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().alpha(if (same) 0.5f else 1f).padding(horizontal = 12.dp, vertical = 9.dp)
+                    modifier = Modifier.fillMaxWidth().alpha(if (same || skip) 0.5f else 1f).padding(horizontal = 12.dp, vertical = 9.dp)
                 ) {
-                    Text("${d.monthValue}/${d.dayOfMonth}", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain, modifier = Modifier.width(48.dp))
+                    Text(
+                        "${d.monthValue}/${d.dayOfMonth}", fontSize = 14.sp, fontWeight = FontWeight.Black,
+                        color = if (holiday != null) ROSE.readable() else theme.textMain, modifier = Modifier.width(48.dp)
+                    )
                     Text(I18n.weekday(d.dayOfWeek), fontSize = 12.sp, color = theme.textMuted, modifier = Modifier.width(34.dp))
                     if (d.isBefore(today)) Text(tr("已過"), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.textMuted, modifier = Modifier.padding(end = 6.dp))
-                    Spacer(Modifier.weight(1f))
-                    if (old != null && !same) {
-                        Text(tr(old.title), fontSize = 12.sp, color = theme.textMuted, textDecoration = TextDecoration.LineThrough)
-                        Icon(Tabler.ArrowRight, contentDescription = tr("改成"), tint = theme.textMuted, modifier = Modifier.padding(horizontal = 6.dp).size(13.dp))
+                    if (holiday != null) {
+                        Text(
+                            tr(holiday.short), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ROSE.readable(),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(end = 6.dp)
+                        )
                     }
-                    if (same) Text(tr("不變  "), fontSize = 11.sp, color = theme.textMuted)
+                    Spacer(Modifier.weight(1f))
+                    if (skip) {
+                        Text(tr("略過  "), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ROSE.readable())
+                    } else {
+                        if (old != null && !same) {
+                            Text(tr(old.title), fontSize = 12.sp, color = theme.textMuted, textDecoration = TextDecoration.LineThrough)
+                            Icon(Tabler.ArrowRight, contentDescription = tr("改成"), tint = theme.textMuted, modifier = Modifier.padding(horizontal = 6.dp).size(13.dp))
+                        }
+                        if (same) Text(tr("不變  "), fontSize = 11.sp, color = theme.textMuted)
+                    }
                     ShiftPill(tpl)
+                }
+            }
+            // 清除：原本的班劃掉 → 「清除」
+            clearing.forEachIndexed { i, d ->
+                if (i > 0 || resolved.isNotEmpty()) HorizontalDivider(color = theme.borderColor.copy(alpha = 0.5f))
+                val old = events.firstOrNull { it.date == d }
+                Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text("${d.monthValue}/${d.dayOfMonth}", fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain, modifier = Modifier.width(48.dp))
+                        Text(I18n.weekday(d.dayOfWeek), fontSize = 12.sp, color = theme.textMuted, modifier = Modifier.width(34.dp))
+                        if (d.isBefore(today)) Text(tr("已過"), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = theme.textMuted, modifier = Modifier.padding(end = 6.dp))
+                        Spacer(Modifier.weight(1f))
+                        if (old != null) {
+                            Text(tr(old.title), fontSize = 12.sp, color = theme.textMuted, textDecoration = TextDecoration.LineThrough)
+                            Icon(Tabler.ArrowRight, contentDescription = tr("改成"), tint = theme.textMuted, modifier = Modifier.padding(horizontal = 6.dp).size(13.dp))
+                        }
+                        Text(
+                            tr("清除"), fontSize = 12.sp, fontWeight = FontWeight.Black, color = ROSE.readable(),
+                            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(ROSE.copy(alpha = 0.12f))
+                                .border(1.dp, ROSE.copy(alpha = 0.4f), RoundedCornerShape(10.dp)).padding(horizontal = 9.dp, vertical = 3.dp)
+                        )
+                    }
+                    if (old != null && (old.note.isNotBlank() || old.attachments.isNotEmpty())) {
+                        Text(tr("這天的備註與附件也會一起刪除"), fontSize = 10.sp, color = ROSE.readable(), modifier = Modifier.padding(start = 82.dp, top = 2.dp))
+                    }
                 }
             }
         }

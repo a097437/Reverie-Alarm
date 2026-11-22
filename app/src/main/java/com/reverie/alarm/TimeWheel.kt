@@ -56,7 +56,7 @@ private const val WHEEL_VISIBLE = 5
  * 停下來會吸附到最近的一格，點上下的數字也會直接捲過去。
  */
 @Composable
-private fun WheelColumn(
+fun WheelColumn(
     count: Int,
     initial: Int,
     loop: Boolean,

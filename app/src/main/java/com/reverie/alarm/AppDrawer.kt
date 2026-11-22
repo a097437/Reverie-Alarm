@@ -68,7 +68,9 @@ fun ReverieDrawerContent(
     isCalendarTab: Boolean,
     accountEmail: String?,
     accentHex: String,
-    conflictCount: Int,
+    /** 明天的休假防呆檢查結果 */
+    guard: GuardReport,
+    holidayPolicy: HolidayPolicy,
     autoCheckUpdate: Boolean,
     palette: ThemePalette,
     subscriptions: List<PartnerSubscription>,
@@ -81,7 +83,7 @@ fun ReverieDrawerContent(
     onOpenAccount: () -> Unit,
     onOpenSharing: () -> Unit,
     onRunSafeguardCheck: () -> Unit,
-    onImportHolidays: () -> Unit,
+    onOpenHolidays: () -> Unit,
     onOpenAlarmCheck: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -343,41 +345,72 @@ fun ReverieDrawerContent(
                         Text(tr("預估 {0} hr", hoursText), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        StatCell(tr("早班"), early, Color(0xFFF59E0B), palette, Modifier.weight(1f))
-                        StatCell(tr("晚班"), evening, Color(0xFF818CF8), palette, Modifier.weight(1f))
-                        StatCell(tr("夜班"), night, Color(0xFF2DD4BF), palette, Modifier.weight(1f))
-                        StatCell(tr("休假"), offDays, Color(0xFF10B981), palette, Modifier.weight(1f))
+                        StatCell(tr("早班"), early, ShiftType.EARLY.accentDot, palette, Modifier.weight(1f))
+                        StatCell(tr("晚班"), evening, ShiftType.EVENING.badgeText, palette, Modifier.weight(1f))
+                        StatCell(tr("夜班"), night, ShiftType.NIGHT.badgeText, palette, Modifier.weight(1f))
+                        StatCell(tr("休假"), offDays, ShiftType.OFF.accentDot, palette, Modifier.weight(1f))
+                    }
+                    // 國定假日上班的天數（不含補假）：方便核對加倍工資
+                    val holidayWork = DayResolver.holidayWorkDays(currentYearMonth, events, holidayPolicy)
+                    if (holidayWork > 0) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(ROSE.copy(alpha = 0.08f))
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Tabler.Flag, contentDescription = null, tint = ROSE.readable(), modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                tr("國定假日上班 {0} 天・可核對加倍工資", holidayWork),
+                                fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 
                 // ---- 智慧防護與快速工具 ----
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(tr("智慧防護與快速工具"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
-                    val hasConflict = conflictCount > 0
+                    val attention = guard.attention.size
+                    val warn = attention > 0 || guard.shiftWithoutAlarm != null
                     ToolRow(
-                        icon = Tabler.AlertTriangle,
-                        iconColor = (if (hasConflict) AMBER else EMERALD).readable(),
+                        icon = if (warn) Tabler.AlertTriangle else Tabler.ShieldCheck,
+                        iconColor = (if (warn) AMBER else EMERALD).readable(),
                         title = tr("休假日鬧鐘防呆檢測"),
-                        sub = tr("檢查明日休假與上班鬧鐘衝突"),
-                        badge = if (hasConflict) tr("{0} 筆衝突", conflictCount) else tr("保護中"),
-                        badgeColor = (if (hasConflict) AMBER else EMERALD).readable(),
+                        sub = when {
+                            attention > 0 -> tr("明天有 {0} 項要你確認", attention)
+                            guard.shiftWithoutAlarm != null -> tr("明天有班，但還沒有開著的鬧鐘")
+                            guard.day.isHolidayWork -> tr("明天{0}照常上班，鬧鐘會照響", tr(guard.day.holiday?.name ?: ""))
+                            else -> tr("檢查明日休假與上班鬧鐘衝突")
+                        },
+                        badge = when {
+                            attention > 0 -> tr("{0} 項待確認", attention)
+                            guard.shiftWithoutAlarm != null -> tr("沒有鬧鐘")
+                            guard.day.isHolidayWork -> tr("照常響")
+                            else -> tr("保護中")
+                        },
+                        badgeColor = (if (warn) AMBER else EMERALD).readable(),
                         palette = palette
                     ) {
                         onCloseDrawer()
                         onRunSafeguardCheck()
                     }
                     ToolRow(
-                        icon = Tabler.CalendarMonth,
-                        iconColor = palette.textMuted,
-                        title = tr("一鍵匯入國定假日"),
-                        sub = tr("匯入年度假日並啟用防誤響"),
-                        badge = tr("匯入"),
+                        icon = Tabler.Flag,
+                        iconColor = if (holidayPolicy.enabled) ROSE.readable() else palette.textMuted,
+                        title = tr("國定假日"),
+                        sub = holidaySummary(holidayPolicy),
+                        badge = tr("設定"),
                         badgeColor = palette.accent,
                         palette = palette,
                         arrowBadge = true
                     ) {
-                        onImportHolidays()
                         onCloseDrawer()
+                        onOpenHolidays()
                     }
                     ToolRow(
                         icon = Tabler.ShieldCheck,

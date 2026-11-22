@@ -46,6 +46,8 @@ object AlarmEngine {
     const val EXTRA_KEY = "alarm_key"
     const val EXTRA_SPEC_JSON = "alarm_spec_json"
     const val SNOOZE_PREFIX = "snooze:"
+    /** 計時器的響鈴（不屬於鬧鐘清單，同步鬧鐘時不能被取消） */
+    const val TIMER_PREFIX = "timer:"
     const val CHANNEL_RINGING = "reverie_alarm_ringing_v2"
 
     private const val PREFS = "reverie_alarm_engine"
@@ -111,7 +113,10 @@ object AlarmEngine {
             val map = readRegistry(context)
             val millis = runCatching { spec.triggerMillis() }.getOrNull()
             if (millis == null || millis <= System.currentTimeMillis()) {
-                if (map.remove(spec.key) != null) writeRegistry(context, map)
+                if (map.remove(spec.key) != null) {
+                    writeRegistry(context, map)
+                    AppLog.i("Alarm", "時間已過、從排程移除：${spec.triggerLocal} ${spec.label}")
+                }
                 firePendingIntent(context, spec.key, create = false)?.let { pi ->
                     alarmManager(context).cancel(pi)
                     pi.cancel()
@@ -135,9 +140,13 @@ object AlarmEngine {
             } else {
                 // 沒有精準鬧鐘權限時的備援（可能延遲幾分鐘）
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pi)
+                AppLog.w("Alarm", "沒有精準鬧鐘權限，改用一般排程（可能延遲）：$key")
             }
         } catch (e: SecurityException) {
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, millis, pi)
+            AppLog.w("Alarm", "排程被系統拒絕，改用一般排程：$key", e)
+        } catch (e: Exception) {
+            AppLog.e("Alarm", "排程失敗：$key", e)
         }
     }
 
@@ -159,19 +168,24 @@ object AlarmEngine {
         val wantedKeys = enabledSpecs.map { it.key }.toSet()
         val existing = synchronized(lock) { readRegistry(context).values.toList() }
         existing.forEach { old ->
+            if (old.key.startsWith(TIMER_PREFIX)) return@forEach
             val stillWanted = if (old.isSnoozeEntry) old.baseKey in wantedKeys else old.key in wantedKeys
             if (!stillWanted) cancel(context, old.key)
         }
+        var ok = 0
         enabledSpecs.forEach { spec ->
             // 已在清單裡的鬧鐘保留它的貪睡次數紀錄
-            schedule(context, spec)
+            if (schedule(context, spec)) ok++
         }
+        val next = enabledSpecs.mapNotNull { runCatching { it.triggerDateTime() }.getOrNull() }.filter { it.isAfter(LocalDateTime.now()) }.minOrNull()
+        AppLog.i("Alarm", "同步排程：開啟中 ${enabledSpecs.size} 個，排入 $ok 個（其餘時間已過），下一個 ${next ?: "無"}，精準鬧鐘權限=${canScheduleExact(context)}")
     }
 
     /** 開機、更新 App、改時間或時區之後，把清單裡的鬧鐘全部重新排程 */
     fun rescheduleAll(context: Context) {
         val all = synchronized(lock) { readRegistry(context).values.toList() }
-        all.forEach { schedule(context, it) }
+        val ok = all.count { schedule(context, it) }
+        AppLog.i("Alarm", "重新排程全部鬧鐘：$ok / ${all.size} 個")
     }
 
     /** 貪睡：N 分鐘後用同一個鬧鐘再響一次 */
@@ -183,6 +197,7 @@ object AlarmEngine {
             snoozeUsed = ringing.snoozeUsed + 1
         )
         schedule(context, snoozeSpec)
+        AppLog.i("Alarm", "貪睡：${snoozeSpec.triggerLocal} 再響（第 ${snoozeSpec.snoozeUsed} 次，共 ${snoozeSpec.maxSnooze} 次）")
         return snoozeSpec
     }
 

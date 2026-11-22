@@ -323,6 +323,8 @@ fun MediaSection(
 @Composable
 fun DateEditSheet(
     date: LocalDate,
+    /** 這天是國定假日時標出來（只是提醒，不影響這裡的任何設定） */
+    holiday: Holiday? = null,
     event: ShiftEvent?,
     dayAlarms: List<ShiftAlarm>,
     templates: List<ShiftTemplate>,
@@ -363,7 +365,13 @@ fun DateEditSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(tr("排班與兩段式鬧鐘設置"), fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
-            Text(date.toString(), fontSize = 20.sp, fontWeight = FontWeight.Black)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(date.toString(), fontSize = 20.sp, fontWeight = FontWeight.Black)
+                if (holiday != null) {
+                    Spacer(Modifier.width(8.dp))
+                    WebPill(tr(holiday.name), ROSE, fontSize = 11.sp)
+                }
+            }
 
             Text(tr("一鍵切換班別模板（保留備註與附件）"), fontSize = 11.sp, color = theme.textMuted)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

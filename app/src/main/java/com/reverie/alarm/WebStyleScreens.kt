@@ -45,6 +45,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -394,7 +395,7 @@ fun WebBottomBar(selectedTab: Int, theme: ThemePalette, position: () -> Float = 
         Tabler.CalendarMonth to tr("排班日曆"),
         Tabler.Alarm to tr("兩段鬧鐘"),
         Tabler.LayoutGrid to tr("班別模板"),
-        Tabler.TemperatureSun to tr("天氣"),
+        Tabler.Tool to tr("工具"),
         Tabler.Sparkles to tr("AI快速排班")
     )
     Column(Modifier.fillMaxWidth().background(theme.bgCard)) {
@@ -540,6 +541,34 @@ fun WebAlarmsScreen(
         contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // 最上方：下一個鬧鐘還有多久響（像系統時鐘 App）
+        item {
+            val now = rememberTickingNow()
+            val next = alarms.filter { it.enabled }
+                .map { it to java.time.LocalDateTime.of(it.date, it.triggerTime) }
+                .filter { it.second.isAfter(now) }
+                .minByOrNull { it.second }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)
+            ) {
+                if (next == null) {
+                    Text(tr("沒有即將響鈴的鬧鐘"), fontSize = 22.sp, fontWeight = FontWeight.Black, color = theme.textMuted, textAlign = TextAlign.Center)
+                } else {
+                    val (al, at) = next
+                    Text(
+                        ringCountdownText(java.time.Duration.between(now, at).toMinutes()),
+                        fontSize = 26.sp, fontWeight = FontWeight.Black, color = theme.textMain, textAlign = TextAlign.Center, lineHeight = 32.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    val stageWord = when (al.stage) { AlarmStage.WAKE -> tr("起床"); AlarmStage.LEAVE -> tr("出門"); AlarmStage.CUSTOM -> tr("鬧鐘") }
+                    Text(
+                        tr("下一個：{0} {1} {2}", tr("{0}月{1}日", al.date.monthValue, al.date.dayOfMonth) + " " + weekNames[al.date.dayOfWeek.value - 1], formatHm(al.triggerTime), stageWord),
+                        fontSize = 13.sp, color = theme.textMuted, textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
         // 標題列
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -897,6 +926,23 @@ private fun AlarmItemRow(
                 }
             }
             RingtoneLine(ringtones, currentRingtone, theme, enabled = !selectMode, onPick = onPickRingtone, onImport = onImport)
+            // 開啟中、還沒到的鬧鐘：顯示「幾小時幾分鐘後響鈴」（每 30 秒更新）
+            if (al.enabled) {
+                val now = rememberTickingNow()
+                val target = java.time.LocalDateTime.of(al.date, al.triggerTime)
+                if (target.isAfter(now)) {
+                    val mins = java.time.Duration.between(now, target).toMinutes()
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 1.dp)) {
+                        Icon(Tabler.Hourglass, contentDescription = null, tint = if (mins < 60) AMBER.readable() else theme.textMuted, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            ringCountdownText(mins), fontSize = 12.sp,
+                            fontWeight = if (mins < 60) FontWeight.Bold else FontWeight.Normal,
+                            color = if (mins < 60) AMBER.readable() else theme.textMuted
+                        )
+                    }
+                }
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
             if (selectMode) {
@@ -914,6 +960,33 @@ private fun AlarmItemRow(
             }
         }
     }
+}
+
+/** 現在時間，每 30 秒更新一次（倒數用） */
+@Composable
+private fun rememberTickingNow(): java.time.LocalDateTime {
+    var now by remember { mutableStateOf(java.time.LocalDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000L)
+            now = java.time.LocalDateTime.now()
+        }
+    }
+    return now
+}
+
+/** 「3 小時 20 分鐘後響鈴」；超過一天加上天數，不到一分鐘顯示「不到 1 分鐘後響鈴」 */
+private fun ringCountdownText(totalMinutes: Long): String {
+    if (totalMinutes < 1) return tr("不到 1 分鐘後響鈴")
+    val d = totalMinutes / 1440
+    val h = (totalMinutes % 1440) / 60
+    val m = totalMinutes % 60
+    val parts = buildList {
+        if (d > 0) add(tr("{0} 天", d))
+        if (h > 0) add(tr("{0} 小時", h))
+        if (m > 0 || (d == 0L && h == 0L)) add(tr("{0} 分鐘", m))
+    }
+    return tr("{0}後響鈴", parts.joinToString(" "))
 }
 
 /** 鈴聲：一行小字，點一下換鈴聲或從手機匯入 */
@@ -968,7 +1041,9 @@ fun WebTemplatesScreen(
     defaultWakeOffset: Int,
     defaultLeaveOffset: Int,
     theme: ThemePalette,
-    onImportHolidays: () -> Unit,
+    /** 國定假日目前的設定（一行） */
+    holidaySummary: String,
+    onOpenHolidays: () -> Unit,
     onUpdateTemplate: (ShiftTemplate) -> Unit,
     onDeleteTemplate: (ShiftTemplate) -> Unit,
     onAddTemplate: (ShiftTemplate) -> Unit
@@ -1004,21 +1079,21 @@ fun WebTemplatesScreen(
         items(templates, key = { it.id }) { tpl ->
             TemplateCard(tpl, theme, isDefault = tpl.id in DEFAULT_TEMPLATE_IDS, onUpdate = onUpdateTemplate, onDelete = { confirmDelete = tpl })
         }
-        // 國定假日：一年用一次，放最下面、一行就好
+        // 國定假日：只是日曆標示＋你的上班方式（照班表／見紅休），不會寫進班表
         item {
             WebCard(theme, radius = 20.dp, padding = 14.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(EMERALD.copy(alpha = 0.14f)),
+                        modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(ROSE.copy(alpha = 0.14f)),
                         contentAlignment = Alignment.Center
-                    ) { Icon(Tabler.CalendarMonth, contentDescription = null, tint = EMERALD.readable(), modifier = Modifier.size(19.dp)) }
+                    ) { Icon(Tabler.Flag, contentDescription = null, tint = ROSE.readable(), modifier = Modifier.size(19.dp)) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text(tr("國定假日"), fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
-                        Text(tr("假日還有上班鬧鐘時會提醒你"), fontSize = 11.sp, color = theme.textMuted)
+                        Text(holidaySummary, fontSize = 11.sp, color = theme.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     Spacer(Modifier.width(8.dp))
-                    WebButton(tr("匯入"), theme, filled = false, color = EMERALD.readable(), icon = Tabler.Download, fontSize = 12.sp, vertical = 8.dp, onClick = onImportHolidays)
+                    WebButton(tr("設定"), theme, filled = false, color = ROSE.readable(), icon = Tabler.Settings, fontSize = 12.sp, vertical = 8.dp, onClick = onOpenHolidays)
                 }
             }
         }

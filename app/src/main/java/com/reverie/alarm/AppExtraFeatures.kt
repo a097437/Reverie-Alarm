@@ -83,108 +83,30 @@ fun ExtraCalendarViews(
     yearMonth: YearMonth,
     events: List<ShiftEvent>,
     alarms: List<ShiftAlarm>,
+    holidayPolicy: HolidayPolicy,
     theme: ThemePalette,
-    onSelectDateAndSwitchMonth: (LocalDate) -> Unit
+    onSelectDateAndSwitchMonth: (LocalDate) -> Unit,
+    weekStartsOnMonday: Boolean = false,
+    onDateChange: (LocalDate) -> Unit = {},
+    onOpenDay: (LocalDate) -> Unit = {},
+    onEditDate: (LocalDate) -> Unit = {}
 ) {
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
 
     when (viewMode) {
-        CalendarViewMode.WEEK -> {
-            // 顯示選取日期所屬的一週 7 天排班卡片
-            val startOfWeek = selectedDate.minusDays((selectedDate.dayOfWeek.value % 7).toLong())
-            val weekDays = (0..6).map { startOfWeek.plusDays(it.toLong()) }
-            val weekNames = listOf(tr("週日"), tr("週一"), tr("週二"), tr("週三"), tr("週四"), tr("週五"), tr("週六"))
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    Text(tr("週視圖 ({0} ~ {1})", weekDays.first(), weekDays.last()), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.textMuted)
-                }
-                items(weekDays) { day ->
-                    val ev = events.firstOrNull { it.date == day }
-                    val dayAlarms = alarms.filter { it.date == day && it.enabled }
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = theme.bgCard,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (day == selectedDate) theme.accent else theme.borderColor),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelectDateAndSwitchMonth(day) }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("${day} (${weekNames[day.dayOfWeek.value % 7]})", fontSize = 12.sp, color = theme.textMuted)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = if (ev != null) "${ev.title} · ${ev.startTime.format(timeFormatter)}-${ev.endTime.format(timeFormatter)}" else tr("未排班"),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = theme.textMain
-                                )
-                                if (!ev?.note.isNullOrBlank()) {
-                                    Text(ev!!.note, fontSize = 11.sp, color = theme.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
-                            if (dayAlarms.isNotEmpty()) {
-                                IconText(tr("⏰ {0}個", dayAlarms.size), fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        CalendarViewMode.DAY -> {
-            // 24 小時垂直時間軸檢視
-            val ev = events.firstOrNull { it.date == selectedDate }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                item {
-                    Text(tr("日 24H 時間軸 · {0} ({1})", selectedDate, ev?.title?.let { tr(it) } ?: tr("無排班")), fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-                items((0..23).toList()) { hour ->
-                    val hourTime = LocalTime.of(hour, 0)
-                    val isWorkingHour = if (ev != null && ev.type != ShiftType.OFF) {
-                        if (ev.endTime.isAfter(ev.startTime)) {
-                            !hourTime.isBefore(ev.startTime) && hourTime.isBefore(ev.endTime)
-                        } else {
-                            !hourTime.isBefore(ev.startTime) || hourTime.isBefore(ev.endTime)
-                        }
-                    } else false
-                    val hourAlarms = alarms.filter { it.date == selectedDate && it.triggerTime.hour == hour }
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(38.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isWorkingHour) ev!!.type.chipBg() else theme.bgCard)
-                            .padding(horizontal = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(String.format("%02d:00", hour), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = theme.textMuted)
-                        if (isWorkingHour) {
-                            Text(tr(ev!!.title), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ev.type.chipText())
-                        }
-                        if (hourAlarms.isNotEmpty()) {
-                            IconText("⏰ ${hourAlarms.first().triggerTime.format(timeFormatter)} ${hourAlarms.first().label}", fontSize = 11.sp, color = theme.accentText, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
+        // 週視圖、日視圖：Google 日曆風格的時間軸（見 CalendarTimeViews.kt）
+        CalendarViewMode.WEEK, CalendarViewMode.DAY -> TimeGridCalendar(
+            weekMode = viewMode == CalendarViewMode.WEEK,
+            selectedDate = selectedDate,
+            weekStartsOnMonday = weekStartsOnMonday,
+            events = events,
+            alarms = alarms,
+            holidayPolicy = holidayPolicy,
+            theme = theme,
+            onDateChange = onDateChange,
+            onOpenDay = onOpenDay,
+            onEditDate = onEditDate
+        )
 
         CalendarViewMode.YEAR -> {
             // 全年 12 個月出勤總覽網格
