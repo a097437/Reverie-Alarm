@@ -41,7 +41,15 @@ object AppLog {
     fun w(tag: String, msg: String, t: Throwable? = null) = write('W', tag, msg, t)
     fun e(tag: String, msg: String, t: Throwable? = null) = write('E', tag, msg, t)
 
-    private fun write(level: Char, tag: String, msg: String, t: Throwable?) {
+    /**
+     * 寫檔交給背景的單一執行緒排隊做：呼叫的地方（多半是主執行緒）不必等硬碟，
+     * 順序也和呼叫順序一樣。閃退時改成直接寫（見 installCrashHandler）
+     */
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "ReverieAppLog").apply { isDaemon = true; priority = Thread.MIN_PRIORITY }
+    }
+
+    private fun write(level: Char, tag: String, msg: String, t: Throwable?, sync: Boolean = false) {
         when (level) {
             'E' -> android.util.Log.e("Reverie/$tag", msg, t)
             'W' -> android.util.Log.w("Reverie/$tag", msg, t)
@@ -53,6 +61,11 @@ object AppLog {
             if (t != null) append("\n    ").append(t.javaClass.name).append(": ").append(t.message.orEmpty().take(300))
             append('\n')
         }
+        if (sync) appendLine(d, line)
+        else runCatching { io.execute { appendLine(d, line) } }.onFailure { appendLine(d, line) }
+    }
+
+    private fun appendLine(d: File, line: String) {
         synchronized(lock) {
             runCatching {
                 val f = File(d, "app.log")
@@ -65,6 +78,11 @@ object AppLog {
         }
     }
 
+    /** 等背景排隊中的紀錄都寫進檔案（匯出報告前用，最多等 2 秒） */
+    private fun drain() {
+        runCatching { io.submit { }.get(2, java.util.concurrent.TimeUnit.SECONDS) }
+    }
+
     private fun installCrashHandler() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, ex ->
@@ -73,7 +91,8 @@ object AppLog {
                 val sw = StringWriter().also { ex.printStackTrace(PrintWriter(it)) }
                 val name = "crash-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".txt"
                 File(d, name).writeText("App ${APP_VERSION}  執行緒：${thread.name}\n$sw")
-                write('E', "Crash", "閃退：${ex.javaClass.name}: ${ex.message.orEmpty().take(200)}（詳細見 $name）", null)
+                // 程式馬上就要結束：直接寫，不排隊
+                write('E', "Crash", "閃退：${ex.javaClass.name}: ${ex.message.orEmpty().take(200)}（詳細見 $name）", null, sync = true)
                 d.listFiles { f -> f.name.startsWith("crash-") }?.sortedByDescending { it.name }?.drop(MAX_CRASHES)?.forEach { it.delete() }
             }
             previous?.uncaughtException(thread, ex)
@@ -84,6 +103,7 @@ object AppLog {
 
     /** 整理成一份完整報告（appState：App 目前的資料摘要，由畫面提供） */
     fun buildReport(context: Context, appState: String): String {
+        drain()
         val d = dir
         val report = buildString {
             appendLine("=== Reverie Alarm 診斷報告 ===")
@@ -191,6 +211,27 @@ object AppLog {
 class ReverieApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // 開發版（debug）：主執行緒讀寫硬碟、網路時在 logcat 記一筆（標籤 StrictMode），方便找出卡頓來源
+        if (BuildConfig.STRICT_MODE) {
+            android.os.StrictMode.setThreadPolicy(
+                android.os.StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads().detectDiskWrites().detectNetwork().detectCustomSlowCalls()
+                    .penaltyLog()
+                    .build()
+            )
+        }
         AppLog.init(this)
+        // 先在背景把畫面一開始就會用到的小設定檔讀進記憶體：第一次用到時不必在主執行緒等硬碟
+        val app = this
+        Thread({
+            PREWARM_PREFS.forEach { runCatching { app.getSharedPreferences(it, MODE_PRIVATE).all } }
+        }, "ReveriePrefsWarmup").apply { priority = Thread.NORM_PRIORITY - 1 }.start()
+    }
+
+    private companion object {
+        val PREWARM_PREFS = listOf(
+            "reverie_lang", "reverie_tools", "reverie_guard", "reverie_alarm_engine",
+            "reverie_weather", "reverie_update", "reverie_stopwatch", "reverie_timer"
+        )
     }
 }

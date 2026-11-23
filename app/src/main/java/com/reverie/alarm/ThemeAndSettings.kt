@@ -59,13 +59,13 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v2.5.0"
+const val APP_VERSION = "v2.6.0"
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
     var fontScale by mutableFloatStateOf(1f)
 }
-const val APP_BUILD_DATE = "2026.11.21"
+const val APP_BUILD_DATE = "2026.11.24"
 
 data class ThemePalette(
     val title: String,
@@ -104,30 +104,49 @@ fun contrastRatio(a: Color, b: Color): Double {
     return (maxOf(la, lb) + 0.05) / (minOf(la, lb) + 0.05)
 }
 
+// 對比度的計算結果快取：同一組顏色在畫面上會被算很多次（月曆每一格、每個按鈕），
+// 每次都要跑最多 20 輪含 pow 的迴圈；查表後重組時幾乎不花時間
+private class ContrastKey(val fg: ULong, val bg: ULong, val min: Double) {
+    override fun equals(other: Any?): Boolean = other is ContrastKey && other.fg == fg && other.bg == bg && other.min == min
+    override fun hashCode(): Int = (fg.hashCode() * 31 + bg.hashCode()) * 31 + min.hashCode()
+}
+
+private val contrastCache = object : LinkedHashMap<ContrastKey, Color>(256, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<ContrastKey, Color>?): Boolean = size > 512
+}
+
+private inline fun cachedContrast(key: ContrastKey, compute: () -> Color): Color {
+    synchronized(contrastCache) { contrastCache[key] }?.let { return it }
+    val c = compute()
+    synchronized(contrastCache) { contrastCache[key] = c }
+    return c
+}
+
 /** 把顏色往黑（淺底）或往白（深底）調，直到對 bg 的對比 ≥ min；色相大致不變 */
-fun Color.readableOn(bg: Color, min: Double = 4.5): Color {
+fun Color.readableOn(bg: Color, min: Double = 4.5): Color = cachedContrast(ContrastKey(value, bg.value, min)) {
     val base = this.copy(alpha = 1f)
-    if (contrastRatio(base, bg) >= min) return base
+    if (contrastRatio(base, bg) >= min) return@cachedContrast base
     val target = if (relativeLuminance(bg) > 0.18) Color.Black else Color.White
     var t = 0.05f
     while (t <= 1f) {
         val c = mixColor(target, t, base)
-        if (contrastRatio(c, bg) >= min) return c
+        if (contrastRatio(c, bg) >= min) return@cachedContrast c
         t += 0.05f
     }
-    return target
+    target
 }
 
 /** 把顏色加深到「白字放上去」對比 ≥ min（按鈕、實心圓圈用） */
-fun Color.darkenForWhiteText(min: Double = 4.5): Color {
+// 快取鍵的 min 用負數，和 readableOn 的鍵分開（readableOn 的 min 一定 ≥ 0）
+fun Color.darkenForWhiteText(min: Double = 4.5): Color = cachedContrast(ContrastKey(value, 0uL, -(min + 1.0))) {
     val base = this.copy(alpha = 1f)
     var t = 0f
     while (t <= 1f) {
         val c = mixColor(Color.Black, t, base)
-        if (contrastRatio(Color.White, c) >= min) return c
+        if (contrastRatio(Color.White, c) >= min) return@cachedContrast c
         t += 0.05f
     }
-    return Color.Black
+    Color.Black
 }
 
 /** 目前這一區的底色（整個 App 預設是卡片底色；月曆格子裡改成網格底色） */
@@ -170,24 +189,47 @@ fun ShiftType.chipBorder(): Color = chipBorder(LocalSurface.current.isLight)
 
 data class NamedSwatch(val name: String, val hex: String)
 
+/** 強調色：18 款低彩度莫蘭迪色，依色相排成一圈（原本 9 款的色碼不變，舊設定照樣對得上） */
 val MORANDI_SWATCHES get() = listOf(
-    NamedSwatch(tr("霧霾藍"), "#5B7C99"),
-    NamedSwatch(tr("鼠尾草綠"), "#7C9082"),
-    NamedSwatch(tr("焦糖陶土"), "#B87A62"),
-    NamedSwatch(tr("煙燻紫丁香"), "#8E7C93"),
-    NamedSwatch(tr("燕麥暖沙"), "#A68A64"),
-    NamedSwatch(tr("暮光靛青"), "#4F5D75"),
-    NamedSwatch(tr("松柏深青"), "#4A7C7E"),
+    NamedSwatch(tr("胭脂紅"), "#9E5A5E"),
     NamedSwatch(tr("乾燥玫瑰"), "#A96E70"),
+    NamedSwatch(tr("蜜桃杏"), "#C48A76"),
+    NamedSwatch(tr("焦糖陶土"), "#B87A62"),
+    NamedSwatch(tr("琥珀蜂蜜"), "#B48E58"),
+    NamedSwatch(tr("燕麥暖沙"), "#A68A64"),
+    NamedSwatch(tr("橄欖金"), "#94905A"),
+    NamedSwatch(tr("抹茶拿鐵"), "#88986A"),
+    NamedSwatch(tr("鼠尾草綠"), "#7C9082"),
+    NamedSwatch(tr("森林苔"), "#5E7D68"),
+    NamedSwatch(tr("松柏深青"), "#4A7C7E"),
+    NamedSwatch(tr("湖水青"), "#5E8C96"),
+    NamedSwatch(tr("霧霾藍"), "#5B7C99"),
+    NamedSwatch(tr("暮光靛青"), "#4F5D75"),
+    NamedSwatch(tr("長春藍紫"), "#6E77A0"),
+    NamedSwatch(tr("煙燻紫丁香"), "#8E7C93"),
+    NamedSwatch(tr("梅子紫"), "#8A6584"),
     NamedSwatch(tr("石墨炭灰"), "#5C677D")
 )
 
+/** 色盤標題旁顯示的「名稱 · 色碼」（自訂色只顯示色碼） */
+fun swatchLabel(swatches: List<NamedSwatch>, hex: String): String {
+    val up = hex.uppercase()
+    return swatches.firstOrNull { it.hex.equals(hex, ignoreCase = true) }?.let { "${it.name} · $up" } ?: up
+}
+
+/** 日曆格子底色：6 款深色＋6 款淺色（文字顏色會自動換深淺） */
 val CALENDAR_CELL_SWATCHES get() = listOf(
     NamedSwatch(tr("深夜曜石"), "#131A2A"),
     NamedSwatch(tr("莫蘭迪灰藍"), "#1E293B"),
     NamedSwatch(tr("暖陶褐灰"), "#262220"),
+    NamedSwatch(tr("墨綠森夜"), "#18231F"),
+    NamedSwatch(tr("葡萄暮紫"), "#221C2A"),
+    NamedSwatch(tr("石墨純黑"), "#16171B"),
     NamedSwatch(tr("象牙紙白"), "#FAF8F5"),
     NamedSwatch(tr("柔霧鼠尾草"), "#EDF2EF"),
+    NamedSwatch(tr("霧藍晨光"), "#EAF0F6"),
+    NamedSwatch(tr("奶茶杏仁"), "#F3EADF"),
+    NamedSwatch(tr("淡櫻粉霧"), "#F6ECEC"),
     NamedSwatch(tr("極簡純白"), "#FFFFFF")
 )
 
@@ -397,39 +439,6 @@ private fun SwatchDot(hex: String, selected: Boolean, ringColor: Color, onClick:
     )
 }
 
-@Composable
-private fun HexInputDialog(title: String, initial: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
-    var text by remember { mutableStateOf(initial) }
-    val valid = parseHexColorOrNull(text) != null
-    MotionAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it.take(9) },
-                    singleLine = true,
-                    label = { Text(tr("色碼，例如 #5B7C99")) }
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(28.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(parseHexColorOrNull(text) ?: Color.Transparent)
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = valid, onClick = {
-                val clean = "#" + text.trim().removePrefix("#").uppercase()
-                onConfirm(clean)
-            }) { Text(tr("套用")) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("取消")) } }
-    )
-}
 
 /** 網頁版風格的底部大面板（滑入／滑出動畫由 MotionBottomSheet 負責） */
 @Composable
@@ -534,9 +543,9 @@ fun SettingsSheet(
                 }
 
                 val accentHex = prefs.customAccentHex.ifBlank { "#5B7C99" }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(tr("強調主題色系（9 款莫蘭迪色盤 ＋ 自訂色碼）"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.weight(1f))
-                    Text(accentHex.uppercase(), fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(tr("強調主題色系（18 款莫蘭迪色盤 ＋ 色環自訂）"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+                    Text(swatchLabel(MORANDI_SWATCHES, accentHex), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText)
                 }
                 SwatchGrid(
                     swatches = MORANDI_SWATCHES,
@@ -548,9 +557,12 @@ fun SettingsSheet(
                 )
 
                 Spacer(Modifier.height(2.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(tr("日曆網格底色自訂（自動對比文字調整）"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.weight(1f))
-                    Text(if (prefs.customGridBgHex.isBlank()) tr("跟隨主題") else prefs.customGridBgHex.uppercase(), fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = palette.textMuted)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(tr("日曆網格底色（12 款 ＋ 色環自訂，文字自動調整深淺）"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted)
+                    Text(
+                        if (prefs.customGridBgHex.isBlank()) tr("跟隨主題") else swatchLabel(CALENDAR_CELL_SWATCHES, prefs.customGridBgHex),
+                        fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText
+                    )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     val followTheme = prefs.customGridBgHex.isBlank()
@@ -573,6 +585,36 @@ fun SettingsSheet(
                     onPick = { onUpdate(prefs.copy(customGridBgHex = it)) },
                     onCustom = { hexTarget = "cell" }
                 )
+
+                // 背景星星
+                Spacer(Modifier.height(2.dp))
+                ToggleRow(
+                    tr("背景星星"),
+                    tr("背景隨機散布小星星，會輕輕閃爍；關掉「介面過渡動畫」時星星不閃"),
+                    prefs.backgroundStars, palette
+                ) { onUpdate(prefs.copy(backgroundStars = it)) }
+                if (prefs.backgroundStars) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(tr("星星數量"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMuted, modifier = Modifier.weight(1f))
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(palette.bgCard)
+                                .border(1.dp, palette.borderColor, RoundedCornerShape(50))
+                                .clickable { onUpdate(prefs.copy(starSeed = prefs.starSeed + 1)) }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Tabler.Sparkles, contentDescription = null, tint = palette.accentText, modifier = Modifier.size(13.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(tr("換一批"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMain)
+                        }
+                    }
+                    SegmentedPicker(
+                        listOf("sparse" to tr("稀疏"), "normal" to tr("適中"), "dense" to tr("繁星")),
+                        prefs.starDensity, palette
+                    ) { onUpdate(prefs.copy(starDensity = it)) }
+                }
             }
 
             // ---- 日曆與字級 ----
@@ -697,9 +739,11 @@ fun SettingsSheet(
     hexTarget?.let { lastHexTarget = it }
     MotionHost(hexTarget != null) {
         val target = lastHexTarget
-        HexInputDialog(
+        ColorWheelDialog(
             title = if (target == "accent") tr("自訂強調色") else tr("自訂日曆底色"),
-            initial = if (target == "accent") prefs.customAccentHex.ifBlank { "#5B7C99" } else prefs.customGridBgHex.ifBlank { "#131A2A" },
+            initialHex = if (target == "accent") prefs.customAccentHex.ifBlank { "#5B7C99" } else prefs.customGridBgHex.ifBlank { "#131A2A" },
+            forCalendarCell = target != "accent",
+            palette = palette,
             onConfirm = { hex ->
                 onUpdate(if (target == "accent") prefs.copy(customAccentHex = hex) else prefs.copy(customGridBgHex = hex))
                 hexTarget = null
@@ -709,6 +753,10 @@ fun SettingsSheet(
     }
 }
 
+/**
+ * 色盤：預設色＋（自訂的顏色）＋色環按鈕，每列放得下幾個就放幾個。
+ * 選的顏色不在預設裡時，色環按鈕前面會多一個圓點顯示目前的自訂色。
+ */
 @Composable
 private fun SwatchGrid(
     swatches: List<NamedSwatch>,
@@ -718,23 +766,21 @@ private fun SwatchGrid(
     onPick: (String) -> Unit,
     onCustom: () -> Unit
 ) {
-    val items: List<NamedSwatch?> = swatches + listOf(null)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(6).forEach { rowItems ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                rowItems.forEach { sw ->
-                    if (sw == null) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(palette.bgCard)
-                                .border(1.dp, palette.borderColor, CircleShape)
-                                .clickable { onCustom() },
-                            contentAlignment = Alignment.Center
-                        ) { Icon(Tabler.Plus, contentDescription = tr("自訂色碼"), tint = palette.textMain, modifier = Modifier.size(16.dp)) }
-                    } else {
-                        SwatchDot(sw.hex, sw.hex.equals(selectedHex, ignoreCase = true), ringColor) { onPick(sw.hex) }
+    val custom = selectedHex.takeIf { h -> h.isNotBlank() && swatches.none { it.hex.equals(h, ignoreCase = true) } }
+    // null = 色環按鈕
+    val items: List<String?> = swatches.map { it.hex } + listOfNotNull(custom) + listOf(null)
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val slot = 34.dp
+        val gap = 6.dp
+        val perRow = ((maxWidth + gap) / (slot + gap)).toInt().coerceAtLeast(4)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items.chunked(perRow).forEach { rowItems ->
+                Row(horizontalArrangement = Arrangement.spacedBy(gap), verticalAlignment = Alignment.CenterVertically) {
+                    rowItems.forEach { hex ->
+                        Box(Modifier.size(slot), contentAlignment = Alignment.Center) {
+                            if (hex == null) ColorWheelButton(30.dp, onCustom)
+                            else SwatchDot(hex, hex.equals(selectedHex, ignoreCase = true), ringColor) { onPick(hex) }
+                        }
                     }
                 }
             }
@@ -749,6 +795,14 @@ private fun SwatchGrid(
 data class ChangelogEntry(val version: String, val date: String, val highlights: List<String>)
 
 val APP_CHANGELOG get() = listOf(
+    ChangelogEntry(
+        "v2.6.0", "2026.11.24", listOf(
+            tr("桌面小工具一次四種：2×2、4×2、兩週 5×2、整月 5×5，兩週和整月可以翻頁；過了午夜自動換到新的一天"),
+            tr("主題色與日曆底色增加到 18 種與 12 種，自訂顏色改用色環調色盤；背景可以開啟會閃爍的小星星"),
+            tr("鬧鐘可靠度檢查支援各品牌手機，依品牌直接打開背景執行設定並附教學"),
+            tr("更順暢：支援 120Hz 高更新率，月曆、分頁切換、碼錶都更順；閒置時不再重畫，更省電")
+        )
+    ),
     ChangelogEntry(
         "v2.5.0", "2026.11.23", listOf(
             tr("國定假日：內建 2026–2027 官方行事曆，日曆標紅字；可選「照班表上班」或「見紅就休」，假日永遠不會自己改班表或關鬧鐘"),
@@ -879,10 +933,7 @@ fun AboutAppSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        modifier = Modifier.size(56.dp).clip(RoundedCornerShape(20.dp)).background(palette.accent),
-                        contentAlignment = Alignment.Center
-                    ) { Text("RA", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White) }
+                    AppLogo(size = 56.dp, corner = 20.dp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Reverie Alarm", fontSize = 16.sp, fontWeight = FontWeight.Black, color = palette.textMain)
                         Text(APP_VERSION, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.ExtraBold, color = palette.accentText)

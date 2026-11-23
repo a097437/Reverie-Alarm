@@ -80,6 +80,45 @@
                 android:resource="@xml/shift_widget_info" />
         </receiver>
 
+        <!-- 桌面小工具：2×2 今天的班 -->
+        <receiver
+            android:name=".ShiftWidgetSmallProvider"
+            android:exported="false"
+            android:label="@string/widget_small_description">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/shift_widget_small_info" />
+        </receiver>
+
+        <!-- 桌面小工具：5×2 兩週班表 -->
+        <receiver
+            android:name=".ShiftWidgetWeeksProvider"
+            android:exported="false"
+            android:label="@string/widget_weeks_description">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/shift_widget_weeks_info" />
+        </receiver>
+
+        <!-- 桌面小工具：5×5 整月班表 -->
+        <receiver
+            android:name=".ShiftWidgetMonthProvider"
+            android:exported="false"
+            android:label="@string/widget_month_description">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/shift_widget_month_info" />
+        </receiver>
+
         <!-- 拍班表照片：把暫存檔交給相機 App 寫入 -->
         <provider
             android:name="androidx.core.content.FileProvider"

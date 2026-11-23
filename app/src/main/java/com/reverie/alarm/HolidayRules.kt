@@ -174,8 +174,11 @@ object DayResolver {
      * 一天的狀態：由上往下，第一條符合的就是答案。
      * 日曆、防呆檢測、統計、共同休假對照、桌面小工具都用這一個函式，不會各說各話。
      */
-    fun resolve(date: LocalDate, events: List<ShiftEvent>, policy: HolidayPolicy): DayStatus {
-        val ev = events.firstOrNull { it.date == date }
+    fun resolve(date: LocalDate, events: List<ShiftEvent>, policy: HolidayPolicy): DayStatus =
+        resolveDay(date, events.firstOrNull { it.date == date }, policy)
+
+    /** 已經查到那天的排班（例如月曆用的查表）時直接用，不必再掃一次整份清單 */
+    fun resolveDay(date: LocalDate, ev: ShiftEvent?, policy: HolidayPolicy): DayStatus {
         val kind = when {
             ev != null && ev.type.isWorkShift -> DayKind.SHIFT    // 1. 有班：以排班為準（國定假日也一樣）
             ev != null && ev.type != ShiftType.OFF -> DayKind.PLAN // 1. 有行程：以排班為準

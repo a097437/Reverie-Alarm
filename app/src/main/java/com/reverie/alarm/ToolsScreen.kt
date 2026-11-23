@@ -78,11 +78,11 @@ object ToolNav {
     }
 
     fun last(context: Context): ToolSection =
-        runCatching { ToolSection.valueOf(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("section", null)!!) }
+        runCatching { ToolSection.valueOf(context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("section", null)!!) }
             .getOrDefault(ToolSection.WEATHER)
 
     fun save(context: Context, s: ToolSection) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("section", s.name).apply()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("section", s.name).apply()
     }
 }
 

@@ -268,10 +268,10 @@ fun WebTopBar(
     onToggleBatch: () -> Unit,
     onSearch: () -> Unit,
     onAddShift: () -> Unit,
-    onAddAlarm: () -> Unit,
-    onOpenWidgets: () -> Unit = {}
+    onAddAlarm: () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().background(theme.bgBase)) {
+    // 透明：背後是 App 底色（和背景星星），星星也會延伸到最上方
+    Column(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -354,8 +354,6 @@ fun WebTopBar(
                     HorizontalDivider(color = theme.borderColor, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
                     MenuEntry(Tabler.Plus, theme.accent, tr("新增排班／日程"), tr("套用班別模板、備註與附件"), theme, solid = true) { onToggleMoreMenu(false); onAddShift() }
                     MenuEntry(Tabler.Alarm, theme.accent, tr("新增日期鬧鐘"), tr("指定日曆日期精準強效提醒"), theme) { onToggleMoreMenu(false); onAddAlarm() }
-                    HorizontalDivider(color = theme.borderColor, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
-                    MenuEntry(Tabler.DeviceMobile, Color(0xFF10B981), tr("桌面小工具"), tr("班表和下一個鬧鐘放到手機桌面"), theme) { onToggleMoreMenu(false); onOpenWidgets() }
                 }
             }
         }
@@ -962,18 +960,9 @@ private fun AlarmItemRow(
     }
 }
 
-/** 現在時間，每 30 秒更新一次（倒數用） */
+/** 現在時間（倒數用）：對齊每分鐘的 0 秒更新，倒數只顯示到分鐘 */
 @Composable
-private fun rememberTickingNow(): java.time.LocalDateTime {
-    var now by remember { mutableStateOf(java.time.LocalDateTime.now()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(30_000L)
-            now = java.time.LocalDateTime.now()
-        }
-    }
-    return now
-}
+private fun rememberTickingNow(): java.time.LocalDateTime = rememberMinuteNow()
 
 /** 「3 小時 20 分鐘後響鈴」；超過一天加上天數，不到一分鐘顯示「不到 1 分鐘後響鈴」 */
 private fun ringCountdownText(totalMinutes: Long): String {

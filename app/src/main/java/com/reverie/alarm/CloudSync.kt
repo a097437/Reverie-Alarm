@@ -313,14 +313,17 @@ object CloudSync {
 
     private suspend fun pushNow(events: List<ShiftEvent>) {
         val u = user ?: return
-        // 只上傳公開欄位：日期、班別名稱、色系、上下班時間（不含備註、附件、鬧鐘）
-        val days = events.associate { ev ->
-            ev.date.toString() to mapOf(
-                "t" to ev.title,
-                "ty" to ev.type.name,
-                "s" to ev.startTime.toString(),
-                "e" to ev.endTime.toString()
-            )
+        // 只上傳公開欄位：日期、班別名稱、色系、上下班時間（不含備註、附件、鬧鐘）。
+        // 整理資料在背景執行緒做（這個模組的協程跑在主執行緒）
+        val days = kotlinx.coroutines.withContext(Dispatchers.Default) {
+            events.associate { ev ->
+                ev.date.toString() to mapOf(
+                    "t" to ev.title,
+                    "ty" to ev.type.name,
+                    "s" to ev.startTime.toString(),
+                    "e" to ev.endTime.toString()
+                )
+            }
         }
         db.collection("publicShifts").document(u.uid).set(
             mapOf("name" to u.name, "days" to days, "updatedAt" to FieldValue.serverTimestamp())

@@ -59,7 +59,7 @@ object UpdateChecker {
     /** App 啟動時呼叫：一天最多一次，略過的版本不再提醒 */
     suspend fun checkOnLaunch(context: Context, enabled: Boolean) {
         if (!enabled) return
-        val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val sp = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val today = LocalDate.now().toString()
         if (sp.getString("last_check", null) == today) return
         val info = runCatching { fetch() }.onFailure { AppLog.w("Update", "檢查更新失敗", it) }.getOrNull() ?: return // 沒網路就下次再說
@@ -76,7 +76,7 @@ object UpdateChecker {
         checking = true
         try {
             val info = runCatching { fetch() }.getOrNull() ?: return null
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString("last_check", LocalDate.now().toString()).apply()
             return if (isNewer(info.version, APP_VERSION)) {
                 newer = info; available = info; true
@@ -89,7 +89,7 @@ object UpdateChecker {
     }
 
     fun skip(context: Context, info: ReleaseInfo) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("skipped", info.version).apply()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("skipped", info.version).apply()
         available = null
     }
 
@@ -162,7 +162,7 @@ fun UpdateDialog(info: ReleaseInfo, theme: ThemePalette, context: Context) {
         containerColor = theme.bgCard,
         title = {
             Column {
-                Text(tr("🎉 有新版本 {0}", info.version), fontWeight = FontWeight.Black, color = theme.textMain, fontSize = 20.sp)
+                IconText(tr("🎉 有新版本 {0}", info.version), fontWeight = FontWeight.Black, color = theme.textMain, fontSize = 20.sp)
                 Spacer(Modifier.height(4.dp))
                 Text(tr("目前使用 {0}", APP_VERSION), fontSize = 12.sp, color = theme.textMuted)
             }

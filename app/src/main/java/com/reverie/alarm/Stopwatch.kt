@@ -19,13 +19,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.LongState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -65,7 +64,7 @@ object StopwatchState {
     fun load(context: Context) {
         if (loaded) return
         loaded = true
-        val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val sp = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         running = sp.getBoolean("running", false)
         accumulatedMs = sp.getLong("accumulated", 0L)
         startedAt = sp.getLong("started_at", 0L)
@@ -74,7 +73,7 @@ object StopwatchState {
     }
 
     private fun save(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean("running", running).putLong("accumulated", accumulatedMs).putLong("started_at", startedAt)
             .putString("laps", laps.joinToString(","))
             .apply()
@@ -119,26 +118,25 @@ fun formatStopwatch(ms: Long): String {
     return if (h > 0) "%d:%02d:%02d.%02d".format(h, m, s, cs) else "%02d:%02d.%02d".format(m, s, cs)
 }
 
+/** 數字等寬：跑的時候寬度不變，不會左右晃，也不會讓外框跟著重新排版 */
+private val DIGITS = TextStyle(fontFeatureSettings = "tnum")
+
 @Composable
 fun StopwatchScreen(theme: ThemePalette) {
     val context = LocalContext.current
     StopwatchState.load(context)
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    // 跑的時候每一格畫面都更新（數字才會順順地跳）
-    LaunchedEffect(StopwatchState.running) {
-        now = System.currentTimeMillis()
-        while (StopwatchState.running) {
-            withFrameMillis { now = System.currentTimeMillis() }
-        }
-    }
-    val elapsed = StopwatchState.elapsed(now)
+    // 跑的時候每一幀都更新（數字才會順順地跳）。
+    // 這個畫面本身不讀它：只交給大時間和「目前這一圈」兩個小元件讀，所以每幀只有它們重組，
+    // 按鈕、整個計次列表只在按下按鈕時才重組
+    // 「工具」分頁不在畫面上時停止每幀更新（時間是用開始的時間點算的，回來時一樣準）
+    val clock = rememberFrameClock(StopwatchState.running && LocalTabVisible.current)
     val laps = StopwatchState.laps.toList()
-    val started = StopwatchState.running || elapsed > 0
+    val started = StopwatchState.running || StopwatchState.accumulatedMs > 0
     // 每一圈的時間（第 1 圈在最前面）
     val splits = laps.mapIndexed { i, total -> total - (if (i == 0) 0L else laps[i - 1]) }
     val fastest = if (splits.size >= 2) splits.withIndex().minBy { it.value }.index else -1
     val slowest = if (splits.size >= 2) splits.withIndex().maxBy { it.value }.index else -1
-    val digits = TextStyle(fontFeatureSettings = "tnum")
+    val digits = DIGITS
     val listState = rememberLazyListState()
     // 新增一圈時捲回最上面，看得到最新的一圈
     LaunchedEffect(laps.size) { if (laps.isNotEmpty()) listState.animateScrollToItem(0) }
@@ -146,15 +144,7 @@ fun StopwatchScreen(theme: ThemePalette) {
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         // ---- 大時間：分秒大字、百分秒小一點（數字等寬，跑的時候不會左右晃） ----
         Box(Modifier.fillMaxWidth().padding(top = 36.dp, bottom = 28.dp), contentAlignment = Alignment.Center) {
-            val full = formatStopwatch(elapsed)
-            val big = if (elapsed >= 3_600_000) 56.sp else 72.sp
-            Text(
-                buildAnnotatedString {
-                    append(full.substringBeforeLast('.'))
-                    withStyle(SpanStyle(fontSize = big * 0.6f, color = theme.textMuted)) { append("." + full.substringAfterLast('.')) }
-                },
-                style = digits, fontSize = big, fontWeight = FontWeight.Light, color = theme.textMain
-            )
+            StopwatchBigTime(clock, theme)
         }
 
         // ---- 按鈕：左邊 計次／重設，右邊 開始／暫停／繼續 ----
@@ -185,8 +175,7 @@ fun StopwatchScreen(theme: ThemePalette) {
         LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
             if (started && (laps.isNotEmpty() || StopwatchState.running)) {
                 item(key = "current") {
-                    val currentLap = elapsed - (laps.lastOrNull() ?: 0L)
-                    LapRow(tr("第 {0} 圈", laps.size + 1), formatStopwatch(currentLap), formatStopwatch(elapsed), theme.textMain, theme, digits, Modifier.animateItem())
+                    CurrentLapRow(clock, laps.size + 1, laps.lastOrNull() ?: 0L, theme, Modifier.animateItem())
                 }
             }
             items(splits.indices.reversed().toList(), key = { "lap-$it" }) { i ->
@@ -207,6 +196,28 @@ fun StopwatchScreen(theme: ThemePalette) {
             }
         }
     }
+}
+
+/** 大時間：每一幀讀時間、只有這個 Text 重組 */
+@Composable
+private fun StopwatchBigTime(clock: LongState, theme: ThemePalette) {
+    val elapsed = StopwatchState.elapsed(clock.longValue)
+    val full = formatStopwatch(elapsed)
+    val big = if (elapsed >= 3_600_000) 56.sp else 72.sp
+    Text(
+        buildAnnotatedString {
+            append(full.substringBeforeLast('.'))
+            withStyle(SpanStyle(fontSize = big * 0.6f, color = theme.textMuted)) { append("." + full.substringAfterLast('.')) }
+        },
+        style = DIGITS, fontSize = big, fontWeight = FontWeight.Light, color = theme.textMain
+    )
+}
+
+/** 目前這一圈（跑的時候列表最上面那一列）：每一幀讀時間、只有這一列重組 */
+@Composable
+private fun CurrentLapRow(clock: LongState, lapNumber: Int, lastLapTotal: Long, theme: ThemePalette, modifier: Modifier) {
+    val elapsed = StopwatchState.elapsed(clock.longValue)
+    LapRow(tr("第 {0} 圈", lapNumber), formatStopwatch(elapsed - lastLapTotal), formatStopwatch(elapsed), theme.textMain, theme, DIGITS, modifier)
 }
 
 @Composable

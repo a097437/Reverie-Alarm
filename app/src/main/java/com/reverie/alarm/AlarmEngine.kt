@@ -58,7 +58,7 @@ object AlarmEngine {
     // ---------------- 排程清單（存在手機裡，重開機也找得回來） ----------------
 
     private fun readRegistry(context: Context): MutableMap<String, AlarmSpec> {
-        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_SPECS, null)
+        val raw = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(PREF_SPECS, null)
             ?: return mutableMapOf()
         return runCatching {
             gson.fromJson(raw, Array<AlarmSpec>::class.java).associateBy { it.key }.toMutableMap()
@@ -66,7 +66,7 @@ object AlarmEngine {
     }
 
     private fun writeRegistry(context: Context, map: Map<String, AlarmSpec>) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putString(PREF_SPECS, gson.toJson(map.values.toTypedArray()))
             .apply()

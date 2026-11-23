@@ -540,8 +540,8 @@ fun AddAlarmSheet(
     var stage by remember { mutableStateOf(AlarmStage.CUSTOM) }
     var snooze by remember { mutableIntStateOf(5) }
     var ringtoneId by remember { mutableStateOf<String?>(null) }
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
-    LaunchedEffect(Unit) { while (true) { delay(15_000); now = LocalDateTime.now() } }
+    // 倒數只顯示到分鐘：對齊每分鐘的 0 秒更新
+    val now = rememberMinuteNow()
 
     // 沒手動選鈴聲時，跟著提醒類型帶入預設鈴聲
     val stageDefaultUri = when (stage) {

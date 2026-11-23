@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,10 +63,12 @@ private fun IconTile(icon: ImageVector, tint: Color, bg: Color, size: Int = 36, 
 
 @Composable
 fun ReverieDrawerContent(
-    currentYearMonth: YearMonth,
+    /** 用函式傳入、在「工時統計」那一塊才讀：換月份時不必整個側邊選單重組（選單關著時也一直在） */
+    currentYearMonth: () -> YearMonth,
     events: List<ShiftEvent>,
     viewMode: CalendarViewMode,
-    isCalendarTab: Boolean,
+    /** 用函式傳入、在「檢視維度」那一塊才讀：換分頁時不必整個側邊選單重組 */
+    isCalendarTab: () -> Boolean,
     accountEmail: String?,
     accentHex: String,
     /** 明天的休假防呆檢查結果 */
@@ -89,18 +92,6 @@ fun ReverieDrawerContent(
     onOpenAbout: () -> Unit,
     onCloseDrawer: () -> Unit
 ) {
-    val monthEvents = events.filter { YearMonth.from(it.date) == currentYearMonth }
-    val early = monthEvents.count { it.type == ShiftType.EARLY }
-    val evening = monthEvents.count { it.type == ShiftType.EVENING }
-    val night = monthEvents.count { it.type == ShiftType.NIGHT }
-    val offDays = monthEvents.count { it.type == ShiftType.OFF }
-    val totalHours = monthEvents.filter { it.type != ShiftType.OFF }.sumOf { ev ->
-        val s = ev.startTime.toSecondOfDay() / 60
-        val e = ev.endTime.toSecondOfDay() / 60
-        val diff = if (e <= s) (24 * 60 - s + e) else (e - s)
-        diff / 60.0
-    }
-    val hoursText = if (totalHours % 1.0 == 0.0) totalHours.toInt().toString() else String.format("%.1f", totalHours)
     val accentName = MORANDI_SWATCHES.firstOrNull { it.hex.equals(accentHex.ifBlank { "#5B7C99" }, ignoreCase = true) }?.name
         ?: accentHex.uppercase()
 
@@ -125,12 +116,9 @@ fun ReverieDrawerContent(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // ---- 標頭：RA + 名稱 + 版本 + 關閉 ----
+                // ---- 標頭：App 圖示 + 名稱 + 版本 + 關閉 ----
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(palette.accent),
-                        contentAlignment = Alignment.Center
-                    ) { Text("RA", fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color.White) }
+                    AppLogo(size = 42.dp, corner = 14.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -290,87 +278,10 @@ fun ReverieDrawerContent(
                 }
 
                 // ---- 日曆檢視維度 2×2 ----
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(tr("日曆檢視維度"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
-                        Text(tr("點選立即切換"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.accentText)
-                    }
-                    viewItems.chunked(2).forEach { rowItems ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                            rowItems.forEach { item ->
-                                val active = isCalendarTab && viewMode == item.mode
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(palette.bgCard)
-                                        .border(if (active) 2.dp else 1.dp, if (active) palette.accent else palette.borderColor, RoundedCornerShape(20.dp))
-                                        .clickable {
-                                            onSelectViewMode(item.mode)
-                                            onCloseDrawer()
-                                        }
-                                        .padding(12.dp)
-                                ) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        IconTile(
-                                            item.icon, if (active) Color.White else palette.textMain,
-                                            if (active) palette.accent else palette.textMuted, size = 30, iconSize = 16, solid = active
-                                        )
-                                        Text(item.label, fontSize = 15.sp, fontWeight = FontWeight.Black, color = if (active) palette.accentText else palette.textMain)
-                                        Text(item.sub, fontSize = 11.sp, color = palette.textMuted, maxLines = 1)
-                                    }
-                                    if (active) {
-                                        Box(Modifier.align(Alignment.TopEnd).size(8.dp).clip(CircleShape).background(palette.accent))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                DrawerViewModes(viewItems, viewMode, isCalendarTab, palette, onSelectViewMode, onCloseDrawer)
 
                 // ---- 本月工時統計 ----
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(palette.bgCard)
-                        .border(1.dp, palette.borderColor, RoundedCornerShape(22.dp))
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Tabler.ChartBar, contentDescription = null, tint = palette.accentText, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(tr("{0}月排班工時統計", currentYearMonth.monthValue), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText, modifier = Modifier.weight(1f))
-                        Text(tr("預估 {0} hr", hoursText), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        StatCell(tr("早班"), early, ShiftType.EARLY.accentDot, palette, Modifier.weight(1f))
-                        StatCell(tr("晚班"), evening, ShiftType.EVENING.badgeText, palette, Modifier.weight(1f))
-                        StatCell(tr("夜班"), night, ShiftType.NIGHT.badgeText, palette, Modifier.weight(1f))
-                        StatCell(tr("休假"), offDays, ShiftType.OFF.accentDot, palette, Modifier.weight(1f))
-                    }
-                    // 國定假日上班的天數（不含補假）：方便核對加倍工資
-                    val holidayWork = DayResolver.holidayWorkDays(currentYearMonth, events, holidayPolicy)
-                    if (holidayWork > 0) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(ROSE.copy(alpha = 0.08f))
-                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Tabler.Flag, contentDescription = null, tint = ROSE.readable(), modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                tr("國定假日上班 {0} 天・可核對加倍工資", holidayWork),
-                                fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
+                DrawerMonthStats(currentYearMonth, events, holidayPolicy, palette)
 
                 // ---- 智慧防護與快速工具 ----
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -590,5 +501,138 @@ private fun ToolRow(
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )
         }
+    }
+}
+
+/** 日曆檢視維度 2×2：只有這一塊讀「是不是在日曆分頁」，換分頁時其他部分不必重組 */
+@Composable
+private fun DrawerViewModes(
+    viewItems: List<DrawerViewItem>,
+    viewMode: CalendarViewMode,
+    isCalendarTab: () -> Boolean,
+    palette: ThemePalette,
+    onSelectViewMode: (CalendarViewMode) -> Unit,
+    onCloseDrawer: () -> Unit
+) {
+    val calendarTab = isCalendarTab()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(tr("日曆檢視維度"), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = palette.textMuted)
+            Text(tr("點選立即切換"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.accentText)
+        }
+        viewItems.chunked(2).forEach { rowItems ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                rowItems.forEach { item ->
+                    val active = calendarTab && viewMode == item.mode
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(palette.bgCard)
+                            .border(if (active) 2.dp else 1.dp, if (active) palette.accent else palette.borderColor, RoundedCornerShape(20.dp))
+                            .clickable {
+                                onSelectViewMode(item.mode)
+                                onCloseDrawer()
+                            }
+                            .padding(12.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            IconTile(
+                                item.icon, if (active) Color.White else palette.textMain,
+                                if (active) palette.accent else palette.textMuted, size = 30, iconSize = 16, solid = active
+                            )
+                            Text(item.label, fontSize = 15.sp, fontWeight = FontWeight.Black, color = if (active) palette.accentText else palette.textMain)
+                            Text(item.sub, fontSize = 11.sp, color = palette.textMuted, maxLines = 1)
+                        }
+                        if (active) {
+                            Box(Modifier.align(Alignment.TopEnd).size(8.dp).clip(CircleShape).background(palette.accent))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 本月工時統計：只有這一塊讀「目前月份」，換月份時其他部分不必重組 */
+@Composable
+private fun DrawerMonthStats(
+    currentYearMonth: () -> YearMonth,
+    events: List<ShiftEvent>,
+    holidayPolicy: HolidayPolicy,
+    palette: ThemePalette
+) {
+    val ym = currentYearMonth()
+    val monthEvents = events.filter { YearMonth.from(it.date) == ym }
+    val early = monthEvents.count { it.type == ShiftType.EARLY }
+    val evening = monthEvents.count { it.type == ShiftType.EVENING }
+    val night = monthEvents.count { it.type == ShiftType.NIGHT }
+    val offDays = monthEvents.count { it.type == ShiftType.OFF }
+    val totalHours = monthEvents.filter { it.type != ShiftType.OFF }.sumOf { ev ->
+        val s = ev.startTime.toSecondOfDay() / 60
+        val e = ev.endTime.toSecondOfDay() / 60
+        val diff = if (e <= s) (24 * 60 - s + e) else (e - s)
+        diff / 60.0
+    }
+    val hoursText = if (totalHours % 1.0 == 0.0) totalHours.toInt().toString() else String.format("%.1f", totalHours)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(palette.bgCard)
+            .border(1.dp, palette.borderColor, RoundedCornerShape(22.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Tabler.ChartBar, contentDescription = null, tint = palette.accentText, modifier = Modifier.size(17.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(tr("{0}月排班工時統計", ym.monthValue), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = palette.accentText, modifier = Modifier.weight(1f))
+            Text(tr("預估 {0} hr", hoursText), fontSize = 12.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            StatCell(tr("早班"), early, ShiftType.EARLY.accentDot, palette, Modifier.weight(1f))
+            StatCell(tr("晚班"), evening, ShiftType.EVENING.badgeText, palette, Modifier.weight(1f))
+            StatCell(tr("夜班"), night, ShiftType.NIGHT.badgeText, palette, Modifier.weight(1f))
+            StatCell(tr("休假"), offDays, ShiftType.OFF.accentDot, palette, Modifier.weight(1f))
+        }
+        // 國定假日上班的天數（不含補假）：方便核對加倍工資
+        val holidayWork = DayResolver.holidayWorkDays(ym, events, holidayPolicy)
+        if (holidayWork > 0) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(ROSE.copy(alpha = 0.08f))
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Tabler.Flag, contentDescription = null, tint = ROSE.readable(), modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    tr("國定假日上班 {0} 天・可核對加倍工資", holidayWork),
+                    fontSize = 11.sp, fontWeight = FontWeight.Bold, color = palette.textMain.copy(alpha = 0.85f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+/**
+ * App 圖示（和手機桌面上的一樣）：自適應圖示的背景＋前景兩層向量圖。
+ * 自適應圖示的畫布是 108dp，桌面只顯示中間 72dp，所以兩層放大 1.5 倍再裁成圓角方形
+ */
+@Composable
+fun AppLogo(size: androidx.compose.ui.unit.Dp, corner: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    Box(modifier.size(size).clip(RoundedCornerShape(corner)), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(R.drawable.ic_launcher_background), contentDescription = null,
+            modifier = Modifier.requiredSize(size * 1.5f)
+        )
+        androidx.compose.foundation.Image(
+            androidx.compose.ui.res.painterResource(R.drawable.ic_launcher_foreground), contentDescription = "Reverie Alarm",
+            modifier = Modifier.requiredSize(size * 1.5f)
+        )
     }
 }

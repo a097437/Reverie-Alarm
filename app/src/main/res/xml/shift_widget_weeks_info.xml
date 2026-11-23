@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 5×2 桌面小工具：兩週班表（可以翻頁） -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_weeks_description"
+    android:initialLayout="@layout/widget_weeks"
+    android:previewLayout="@layout/widget_weeks"
+    android:minWidth="320dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="250dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="5"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

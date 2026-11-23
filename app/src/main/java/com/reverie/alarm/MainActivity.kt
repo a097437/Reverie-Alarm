@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -65,6 +66,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.gson.Gson
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
@@ -188,7 +190,11 @@ data class AppPreferences(
     val autoCheckUpdate: Boolean = true,
     // ---- 介面動態效果 ----
     val animationsEnabled: Boolean = true,
-    val animationSpeed: String = "normal"   // fast / normal / slow
+    val animationSpeed: String = "normal",  // fast / normal / slow
+    // ---- 背景星星（見 StarfieldBackground.kt）----
+    val backgroundStars: Boolean = true,
+    val starDensity: String = "normal",     // sparse / normal / dense
+    val starSeed: Int = 0                   // 「換一批」時加 1，星星重新隨機分布
 )
 
 data class PartnerSyncState(
@@ -344,6 +350,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         I18n.ensure(applicationContext)
         AppSecurity.installAppCheck(applicationContext) // 要在任何 Firebase 請求之前
+        // Firebase 登入模組第一次取用時會讀好幾個檔案：App Check 裝好後先在背景初始化，
+        // 畫面開始用（CloudSync.start）時就不必在主執行緒等硬碟。沒有設定 Firebase 時會失敗，忽略即可
+        Thread({ runCatching { com.google.firebase.auth.FirebaseAuth.getInstance() } }, "ReverieFirebaseWarmup").start()
         ToolNav.fromIntent(intent) // 從碼錶／計時的通知點進來
         GuardBridge.fromIntent(intent) // 從前一晚提醒的通知點進來
         runCatching { ToolNotifications.restore(applicationContext) } // 還在跑的碼錶／計時把通知補回來
@@ -375,6 +384,49 @@ class MainActivity : ComponentActivity() {
         GuardBridge.fromIntent(intent) // 從前一晚提醒的通知點進來
     }
 
+    override fun onStop() {
+        // 進背景（回桌面、切 App、鎖屏）：還在等合併的修改立刻寫入，不等 300ms
+        AppPersistence.flush()
+        super.onStop()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        UserActivity.touched() // 回到 App 時星星閃一下（之後沒碰就停住，見 StarfieldBackground）
+        requestHighRefreshRate()
+    }
+
+    /**
+     * 高更新率：Android 沒有「120Hz 權限」，App 只能向系統「要求」顯示模式，最後由系統決定。
+     *   - 挑「同解析度、不超過 120Hz」裡最高的模式；用更新率挑，不能寫死編號（每支手機的編號不同，
+     *     例如小米 14T Pro 的 3 號才是 120Hz、2 號是 144Hz）
+     *   - 有些系統會忽略 preferredRefreshRate（HyperOS 3 就是），preferredDisplayModeId 才有效
+     *   - 省電模式時不要求，交給系統；手機過熱時系統仍會降到 60Hz（保護手機，App 不該也無法蓋過）
+     */
+    private fun requestHighRefreshRate() {
+        val d = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else @Suppress("DEPRECATION") windowManager.defaultDisplay
+        }.getOrNull() ?: return
+        val cur = d.mode
+        val best = d.supportedModes
+            .filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight && it.refreshRate <= 121f }
+            .maxByOrNull { it.refreshRate }
+        val powerSave = getSystemService(android.os.PowerManager::class.java)?.isPowerSaveMode == true
+        val want = if (powerSave || best == null) 0 else best.modeId
+        val attrs = window.attributes
+        if (attrs.preferredDisplayModeId != want) {
+            attrs.preferredDisplayModeId = want
+            window.attributes = attrs
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        // 只記按下與放開（不記每一個移動事件），讓背景星星知道使用者還在操作
+        val action = ev.actionMasked
+        if (action == android.view.MotionEvent.ACTION_DOWN || action == android.view.MotionEvent.ACTION_UP) UserActivity.touched()
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onDestroy() {
         appRecomposer?.cancel()
         appRecomposer = null
@@ -399,21 +451,9 @@ fun ReverieAlarmApp() {
         appLifecycle.addObserver(obs)
         onDispose { appLifecycle.removeObserver(obs) }
     }
-    val repository = remember { AppRepository(context) }
     val coroutineScope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val gson = remember { Gson() }
-
-    val keyTemplates = remember { stringPreferencesKey("saved_shift_templates") }
-    val keyTheme = remember { stringPreferencesKey("saved_morandi_theme") }
-    val keyPrefs = remember { stringPreferencesKey("saved_app_preferences") }
-    val keyRingtones = remember { stringPreferencesKey("saved_ringtone_library") }
-    val keyAttachments = remember { stringPreferencesKey("saved_event_attachments") }
-    val keyPartner = remember { stringPreferencesKey("saved_partner_sync") }
-    val keyWeekMonday = remember { booleanPreferencesKey("saved_week_monday") }
-    val keyFontScale = remember { floatPreferencesKey("saved_font_scale") }
-    val keyEventsV2 = remember { stringPreferencesKey("v2_events") }
-    val keyAlarmsV2 = remember { stringPreferencesKey("v2_alarms") }
 
     val runtimeLogs = remember { mutableStateListOf<String>() }
     fun logEvent(msg: String) {
@@ -451,7 +491,8 @@ fun ReverieAlarmApp() {
         UpdateChecker.checkOnLaunch(context.applicationContext, appPrefs.autoCheckUpdate)
     }
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val currentTheme = buildThemePalette(appPrefs, systemDark)
+    // 主題色只在設定或深淺色改變時才重算（裡面有對比度計算；以前主畫面每次重組都算一次）
+    val currentTheme = remember(appPrefs, systemDark) { buildThemePalette(appPrefs, systemDark) }
     SideEffect {
         UiScale.fontScale = appPrefs.fontScale
         Motion.enabled = appPrefs.animationsEnabled
@@ -466,13 +507,18 @@ fun ReverieAlarmApp() {
     var viewMode by remember { mutableStateOf(CalendarViewMode.MONTH) }
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabPagerState = rememberPagerState(initialPage = 0) { 5 }
-    // 點底部分頁、搜尋跳轉等改 selectedTab → 平滑滑過去
-    LaunchedEffect(selectedTab) {
-        if (tabPagerState.currentPage != selectedTab || tabPagerState.currentPageOffsetFraction != 0f) {
-            tabPagerState.animateScrollToPage(
-                selectedTab,
-                animationSpec = androidx.compose.animation.core.tween(340, easing = Motion.EnterEasing)
-            )
+    // 目前畫面兩側要一直保持組好的分頁數（開 App 後逐步加到 4＝全部分頁都組好）
+    var tabsKeptComposed by remember { mutableIntStateOf(0) }
+    // 點底部分頁、搜尋跳轉等改 selectedTab → 平滑滑過去。
+    // selectedTab 只在協程裡讀（不當 LaunchedEffect 的鍵）：換分頁時不會讓整個主畫面重組
+    LaunchedEffect(tabPagerState) {
+        snapshotFlow { selectedTab }.collectLatest { target ->
+            if (tabPagerState.currentPage != target || tabPagerState.currentPageOffsetFraction != 0f) {
+                tabPagerState.animateScrollToPage(
+                    target,
+                    animationSpec = androidx.compose.animation.core.tween(340, easing = Motion.EnterEasing)
+                )
+            }
         }
     }
     // 手指拖曳換分頁並停穩 → 更新 selectedTab
@@ -544,77 +590,22 @@ fun ReverieAlarmApp() {
         mutableStateListOf<RingtoneEntry>().apply { addAll(BuiltInRingtones.entries(context)) }
     }
 
-    // 同步寫入 DataStore 本機硬碟
+    // 存檔：拍一張快照交給 AppPersistence（合併 300ms 內的修改、JSON 在背景轉、只寫一次，見 AppPersistence.kt）
     fun persistAllData() {
-        val currentEvents = events.toList()
-        val currentAlarms = alarms.toList()
-        val currentTemplates = templates.toList()
-        val themeName = themePreset.name
-        val prefsSnapshot = appPrefs
-        val ringtonesSnapshot = ringtoneLibrary.toList()
-        val partnerSnapshot = partnerSync
-        val attachmentsMap = currentEvents.associate { it.date.toString() to it.attachments }
-
-        coroutineScope.launch {
-            val savedRecords = currentEvents.map { ev ->
-                SavedShiftRecord(
-                    dateStr = ev.date.toString(),
-                    templateId = ev.type.name,
-                    title = ev.title,
-                    startTime = ev.startTime.toString(),
-                    endTime = ev.endTime.toString(),
-                    colorHex = 0L,
-                    isOvernight = ev.endTime.isBefore(ev.startTime),
-                    note = ev.note
-                )
-            }
-            repository.saveShiftRecords(savedRecords)
-
-            val savedAlarms = currentAlarms.map { al ->
-                SavedAlarmItem(
-                    id = al.requestCode,
-                    label = "${al.date}|${al.stage.name}|${al.label}",
-                    hour = al.triggerTime.hour,
-                    minute = al.triggerTime.minute,
-                    enabled = al.enabled,
-                    ringtoneUri = al.ringtoneUri,
-                    ringtoneName = al.ringtoneName,
-                    maxSnoozeCount = if (al.stage == AlarmStage.LEAVE) 0 else al.maxSnoozeCount
-                )
-            }
-            repository.saveAlarms(savedAlarms)
-            NativeAlarmScheduler.rules = prefsSnapshot
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                NativeAlarmScheduler.syncAll(context.applicationContext, currentAlarms)
-                ShiftWidgetProvider.saveSnapshot(context.applicationContext, currentEvents, prefsSnapshot.holidayPolicy())
-                EveningGuard.schedule(context.applicationContext, prefsSnapshot) // 前一晚提醒（設定改了就重排）
-            }
-            // 已登入就把公開欄位（日期、班別、時間）同步到雲端
-            CloudSync.schedulePush(currentEvents)
-
-            val savedTplList = currentTemplates.map { tpl ->
-                SavedShiftTemplate(
-                    id = tpl.id,
-                    name = "${tpl.type.name}|${tpl.title}|${tpl.wakeOffsetMinutes}|${tpl.leaveOffsetMinutes}",
-                    startTime = tpl.startTime.toString(),
-                    endTime = tpl.endTime.toString(),
-                    colorHex = 0L,
-                    isOvernight = tpl.isOff
-                )
-            }
-            context.dataStore.edit { prefs ->
-                prefs[keyTemplates] = gson.toJson(savedTplList)
-                prefs[keyTheme] = themeName
-                prefs[keyPrefs] = gson.toJson(prefsSnapshot)
-                prefs[keyRingtones] = gson.toJson(ringtonesSnapshot)
-                prefs[keyAttachments] = gson.toJson(attachmentsMap)
-                prefs[keyPartner] = gson.toJson(partnerSnapshot)
-                prefs[keyWeekMonday] = prefsSnapshot.weekStartsOnMonday
-                prefs[keyFontScale] = prefsSnapshot.fontScale
-                prefs[keyEventsV2] = gson.toJson(currentEvents.map { it.toDto() })
-                prefs[keyAlarmsV2] = gson.toJson(currentAlarms.map { it.toDto() })
-            }
-        }
+        // 鬧鐘規則馬上更新（畫面上的試響、立即響鈴也要用最新的規則）
+        NativeAlarmScheduler.rules = appPrefs
+        AppPersistence.persist(
+            context,
+            PersistSnapshot(
+                events = events.toList(),
+                alarms = alarms.toList(),
+                templates = templates.toList(),
+                themeName = themePreset.name,
+                prefs = appPrefs,
+                ringtones = ringtoneLibrary.toList(),
+                partner = partnerSync
+            )
+        )
     }
 
     fun addStageAlarmsFor(newEvent: ShiftEvent, wakeOffsetMinutes: Long, leaveOffsetMinutes: Long) {
@@ -953,133 +944,29 @@ fun ReverieAlarmApp() {
         }
     }
 
-    // 啟動時從 DataStore 載入所有資料
+    // 啟動時載入所有資料：讀檔與解析都在背景執行緒（見 AppPersistence.load），解析完一次套用到畫面
     LaunchedEffect(Unit) {
         logEvent(tr("Reverie Alarm 原生核心啟動"))
-        AlarmEngine.ensureChannel(context)
-        val prefs = context.dataStore.data.first()
-        prefs[keyTheme]?.let { savedThemeName ->
-            runCatching { MorandiTheme.valueOf(savedThemeName) }.getOrNull()?.let { themePreset = it }
+        val loaded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            AlarmEngine.ensureChannel(context)
+            AppPersistence.load(context.applicationContext, today)
         }
-        prefs[keyPrefs]?.let { pJson ->
-            runCatching { gson.fromJson(pJson, AppPreferences::class.java) }.getOrNull()?.let {
-                // 舊版沒有 colorMode：把原本選的莫蘭迪主題轉成新設定
-                appPrefs = if (pJson.contains("\"colorMode\"")) it else migrateLegacyTheme(it, prefs[keyTheme])
-            }
+        loaded.theme?.let { themePreset = it }
+        appPrefs = loaded.prefs
+        loaded.partner?.let { partnerSync = it }
+        ringtoneLibrary.clear()
+        ringtoneLibrary.addAll(loaded.ringtones)
+        loaded.templates?.let {
+            templates.clear()
+            templates.addAll(it)
         }
-        prefs[keyPartner]?.let { partnerJson ->
-            runCatching { gson.fromJson(partnerJson, PartnerSyncState::class.java) }.getOrNull()?.let { partnerSync = it }
-        }
-        prefs[keyRingtones]?.let { rtJson ->
-            val parsedRt = runCatching { gson.fromJson(rtJson, Array<RingtoneEntry>::class.java).toList() }.getOrDefault(emptyList())
-            if (parsedRt.isNotEmpty()) {
-                ringtoneLibrary.clear()
-                ringtoneLibrary.addAll(parsedRt)
-            }
-        }
-        prefs[keyTemplates]?.let { tplJson ->
-            val parsedList = runCatching {
-                gson.fromJson(tplJson, Array<SavedShiftTemplate>::class.java).toList()
-            }.getOrDefault(emptyList())
-            if (parsedList.isNotEmpty()) {
-                templates.clear()
-                parsedList.forEach { item ->
-                    val parts = item.name.split("|", limit = 4)
-                    if (parts.size == 4) {
-                        templates.add(
-                            ShiftTemplate(
-                                id = item.id,
-                                title = parts[1],
-                                type = runCatching { ShiftType.valueOf(parts[0]) }.getOrDefault(ShiftType.CUSTOM),
-                                startTime = LocalTime.parse(item.startTime),
-                                endTime = LocalTime.parse(item.endTime),
-                                wakeOffsetMinutes = parts[2].toLongOrNull() ?: 90L,
-                                leaveOffsetMinutes = parts[3].toLongOrNull() ?: 40L,
-                                isOff = item.isOvernight
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        val savedAttMap: Map<String, List<ShiftAttachment>> = prefs[keyAttachments]?.let { attJson ->
-            runCatching {
-                val rawMap = gson.fromJson(attJson, Map::class.java) as? Map<*, *>
-                rawMap?.mapNotNull { (k, v) ->
-                    val keyStr = k as? String ?: return@mapNotNull null
-                    val arr = gson.fromJson(gson.toJson(v), Array<ShiftAttachment>::class.java).toList()
-                    keyStr to arr
-                }?.toMap()
-            }.getOrNull()
-        } ?: emptyMap()
-
-        val v2Events: List<ShiftEvent>? = prefs[keyEventsV2]?.let { raw ->
-            runCatching { gson.fromJson(raw, Array<EventDto>::class.java).mapNotNull { it.toModel() } }.getOrNull()
-        }
-        val v2Alarms: List<ShiftAlarm>? = prefs[keyAlarmsV2]?.let { raw ->
-            runCatching { gson.fromJson(raw, Array<AlarmDto>::class.java).mapNotNull { it.toModel() } }.getOrNull()
-        }
-        val savedRecords = repository.shiftRecordsFlow.first()
-        val savedAlarms = repository.alarmsFlow.first()
-
-        if (v2Events != null && v2Alarms != null) {
-            // v2 完整格式：保留排班與鬧鐘的關聯
+        if (loaded.source != LoadSource.EMPTY) {
             events.clear()
-            events.addAll(v2Events)
+            events.addAll(loaded.events)
             alarms.clear()
-            alarms.addAll(v2Alarms)
-            persistAllData()
-        } else if (savedRecords.isNotEmpty()) {
-            events.clear()
-            savedRecords.forEach { rec ->
-                val parsedType = runCatching { ShiftType.valueOf(rec.templateId) }.getOrDefault(ShiftType.CUSTOM)
-                events.add(
-                    ShiftEvent(
-                        date = LocalDate.parse(rec.dateStr),
-                        title = rec.title,
-                        type = parsedType,
-                        startTime = LocalTime.parse(rec.startTime),
-                        endTime = LocalTime.parse(rec.endTime),
-                        note = rec.note,
-                        attachments = savedAttMap[rec.dateStr].orEmpty()
-                    )
-                )
-            }
-            alarms.clear()
-            savedAlarms.forEach { item ->
-                val parts = item.label.split("|", limit = 3)
-                if (parts.size == 3) {
-                    val parsedDate = runCatching { LocalDate.parse(parts[0]) }.getOrDefault(today)
-                    val parsedStage = runCatching { AlarmStage.valueOf(parts[1]) }.getOrDefault(AlarmStage.CUSTOM)
-                    alarms.add(
-                        ShiftAlarm(
-                            requestCode = item.id,
-                            date = parsedDate,
-                            triggerTime = LocalTime.of(item.hour, item.minute),
-                            stage = parsedStage,
-                            label = parts[2],
-                            enabled = item.enabled,
-                            ringtoneUri = item.ringtoneUri,
-                            ringtoneName = item.ringtoneName,
-                            maxSnoozeCount = if (parsedStage == AlarmStage.LEAVE) 0 else item.maxSnoozeCount
-                        )
-                    )
-                }
-            }
-            // 舊版的鬧鐘編號可能重複（同一毫秒建立的起床＋出門鬧鐘會互相覆蓋），在這裡重新編號
-            alarms.forEach { NativeAlarmScheduler.cancelLegacy(context, it.requestCode) }
-            val seenCodes = mutableSetOf<Int>()
-            for (i in alarms.indices) {
-                val a = alarms[i]
-                if (!seenCodes.add(a.requestCode)) {
-                    val fresh = a.copy(requestCode = kotlin.random.Random.nextInt(1, Int.MAX_VALUE))
-                    alarms[i] = fresh
-                    seenCodes.add(fresh.requestCode)
-                }
-            }
-            persistAllData()
-        } else if (events.isEmpty()) {
+            alarms.addAll(loaded.alarms)
+        } else if (events.isEmpty() && templates.size >= 4) {
+            // 第一次安裝：放幾天示範排班
             applyTemplateToDate(
                 today,
                 templates[0],
@@ -1090,26 +977,29 @@ fun ReverieAlarmApp() {
             applyTemplateToDate(today.plusDays(2), templates[1], autoSave = false)
             applyTemplateToDate(today.plusDays(3), templates[2], autoSave = false)
             applyTemplateToDate(today.plusDays(4), templates[3], autoSave = false)
-            persistAllData()
+            for (i in alarms.indices) alarms[i] = BuiltInRingtones.migrateAlarm(context, alarms[i])
         }
-
-        // 鈴聲換新：移除舊版借用手機系統音效的項目，舊設定自動改成新的內建合成鈴聲
-        val mergedRingtones = BuiltInRingtones.mergeLibrary(context, ringtoneLibrary.toList())
-        ringtoneLibrary.clear()
-        ringtoneLibrary.addAll(mergedRingtones)
-        appPrefs = BuiltInRingtones.migratePrefs(context, appPrefs)
-        for (i in alarms.indices) alarms[i] = BuiltInRingtones.migrateAlarm(context, alarms[i])
+        // 套用完才開放存檔（之前的空畫面不會蓋掉存檔）
+        AppPersistence.markLoaded()
         persistAllData()
+        // 第一個畫面出來之後，再把其他分頁一頁一頁組好：之後左右切換分頁不用臨時組出整頁
+        for (n in 1..4) {
+            kotlinx.coroutines.delay(250)
+            tabsKeptComposed = n
+        }
     }
 
-    // 動態計算主題色（支援自訂強調色碼與日曆底色）
-    // 換分頁、換月份、換檢視模式、開啟批次模式時收起「編輯」膠囊
-    LaunchedEffect(selectedTab, currentYearMonth, viewMode, batchMode) { quickCapsuleDate = null }
+    // 換分頁、換月份、換檢視模式、開啟批次模式時收起「編輯」膠囊。
+    // 這些值只在協程裡讀：換分頁、換月份時不會讓整個主畫面重組（以前當 LaunchedEffect 的鍵，每次都整個重組）
+    LaunchedEffect(Unit) {
+        snapshotFlow { listOf<Any>(selectedTab, currentYearMonth, viewMode, batchMode) }.collect { quickCapsuleDate = null }
+    }
 
     // 返回鍵：先收起開著的東西，再回到排班日曆，最後才離開 App
-    val backConsumes = drawerState.isOpen || batchMode || quickCapsuleDate != null ||
-        viewingOwnerCode != null || selectedTab != 0
-    androidx.activity.compose.BackHandler(enabled = backConsumes) {
+    // （判斷交給小元件去讀：點日期、換分頁時不必讓整個主畫面重組）
+    AppBackHandler(
+        enabled = { drawerState.isOpen || batchMode || quickCapsuleDate != null || viewingOwnerCode != null || selectedTab != 0 }
+    ) {
         when {
             drawerState.isOpen -> coroutineScope.launch { drawerState.close() }
             batchMode -> { batchMode = false; batchSelectedDates.clear() }
@@ -1122,7 +1012,7 @@ fun ReverieAlarmApp() {
     val effectiveAccent = currentTheme.accent
     val effectiveCardBg = currentTheme.calCellBg
 
-    val colorScheme = if (!currentTheme.isDark) {
+    val colorScheme = remember(currentTheme) { if (!currentTheme.isDark) {
         lightColorScheme(
             primary = effectiveAccent,
             background = currentTheme.bgBase,
@@ -1142,12 +1032,16 @@ fun ReverieAlarmApp() {
             onBackground = currentTheme.textMain,
             onSurface = currentTheme.textMain
         )
-    }
+    } }
 
     val tomorrow = today.plusDays(1)
-    val holidayPolicy = appPrefs.holidayPolicy()
-    // 明天的休假防呆（規則見 HolidayRules.kt）：有排班就以排班為準、鬧鐘看歸屬不看日期、只建議不自動關
-    val guard = HolidayGuard.check(tomorrow, LocalDateTime.now(), events, alarms, holidayPolicy)
+    val holidayPolicy = remember(appPrefs) { appPrefs.holidayPolicy() }
+    // 明天的休假防呆（規則見 HolidayRules.kt）：有排班就以排班為準、鬧鐘看歸屬不看日期、只建議不自動關。
+    // 只在資料改了（或每分鐘，已經響過的鬧鐘不算）才重新檢查；結果一樣時不會讓畫面重組
+    val guardClock = rememberMinuteNowState()
+    val guard by remember(tomorrow, holidayPolicy) {
+        derivedStateOf { HolidayGuard.check(tomorrow, guardClock.value, events, alarms, holidayPolicy) }
+    }
     // 有要確認的事，而且不是已經按過「全部保留」的同一組
     val guardPending = guard.attention.isNotEmpty() && guard.attentionKey != safeguardDismissKey
     LaunchedEffect(guard.attentionKey, safeguardDismissKey, appPrefs.autoHolidaySafeguard) {
@@ -1257,6 +1151,11 @@ fun ReverieAlarmApp() {
         else -> guard.day.event?.let { ev -> tr("🇹🇼 明天是{0}，你排了{1}，要照常上班嗎？", tr(guard.day.holiday?.name ?: ""), tr(ev.title)) }
     }
 
+    // 訂閱清單：內容變了才換新清單（以前每次重組都複製一份新的，側邊選單因此每次都跟著重組）
+    val drawerSubscriptions by remember { derivedStateOf { CloudSync.subscriptions.toList() } }
+    // 批次模式的底部選單：只有「是否顯示」改變時才需要重組
+    val showBatchBar by remember { derivedStateOf { selectedTab == 0 && batchMode } }
+
     MaterialTheme(colorScheme = colorScheme) {
     CompositionLocalProvider(LocalSurface provides SurfaceInfo(currentTheme.bgCard, !currentTheme.isDark)) {
         TopToastHost(currentTheme)
@@ -1265,17 +1164,18 @@ fun ReverieAlarmApp() {
             drawerState = drawerState,
             drawerContent = {
                 ReverieDrawerContent(
-                    currentYearMonth = currentYearMonth,
+                    // 月份、目前分頁用函式傳入：換月份、換分頁時只有選單裡用到的那一小塊重組
+                    currentYearMonth = { currentYearMonth },
                     events = displayEvents,
                     viewMode = viewMode,
-                    isCalendarTab = selectedTab == 0,
+                    isCalendarTab = { selectedTab == 0 },
                     accountEmail = CloudSync.user?.email,
                     accentHex = appPrefs.customAccentHex,
                     guard = guard,
                     holidayPolicy = holidayPolicy,
                     autoCheckUpdate = appPrefs.autoCheckUpdate,
                     palette = currentTheme,
-                    subscriptions = partnerSync.subscriptionList(today),
+                    subscriptions = drawerSubscriptions,
                     viewingCode = viewingOwnerCode,
                     holidayCompare = partnerSync.holidayCompare,
                     onSelectSource = { code ->
@@ -1312,8 +1212,20 @@ fun ReverieAlarmApp() {
                 )
             }
         ) {
+            // 背景：底色＋（可關閉的）隨機小星星；畫面本身透明，星星從卡片之間透出來
+            Box(Modifier.fillMaxSize().background(currentTheme.bgBase)) {
+            if (appPrefs.backgroundStars) {
+                StarfieldBackground(
+                    amount = appPrefs.starDensity,
+                    seed = appPrefs.starSeed,
+                    accent = currentTheme.accentRaw,
+                    isDark = currentTheme.isDark,
+                    twinkle = appPrefs.animationsEnabled,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
             Scaffold(
-                containerColor = currentTheme.bgBase,
+                containerColor = Color.Transparent,
                 topBar = {
                     Column {
                     WebTopBar(
@@ -1355,8 +1267,7 @@ fun ReverieAlarmApp() {
                         },
                         onSearch = { showSearchDialog = true },
                         onAddShift = { showEditSheet = true },
-                        onAddAlarm = { showAddAlarmDialog = true },
-                        onOpenWidgets = { toolSection = ToolSection.WIDGETS; selectedTab = 3 }
+                        onAddAlarm = { showAddAlarmDialog = true }
                     )
                     // 唯讀共享日曆警示橫幅（網頁版 shared-readonly-banner）
                     if (viewingOwnerCode != null) {
@@ -1405,6 +1316,9 @@ fun ReverieAlarmApp() {
                         modifier = Modifier.fillMaxSize(),
                         // 批次模式時鎖住分頁滑動，避免選日期時誤切分頁
                         userScrollEnabled = !batchMode,
+                        // 5 個分頁都一直組好：開始滑的那一幀不用再從頭組出新分頁（以前那一幀要 20ms）。
+                        // App 開啟後再一頁一頁補上，不拖慢第一個畫面
+                        beyondViewportPageCount = tabsKeptComposed,
                         key = { it }
                     ) { page ->
                     when (page) {
@@ -1592,33 +1506,42 @@ fun ReverieAlarmApp() {
                             }
                         )
 
-                        3 -> ToolsScreen(
-                            section = toolSection,
-                            theme = currentTheme,
-                            onSectionChange = { toolSection = it; ToolNav.save(context, it) },
-                            weather = { WeatherScreen(theme = currentTheme, events = events, alarms = alarms) },
-                            stopwatch = { StopwatchScreen(currentTheme) },
-                            timer = { TimerScreen(currentTheme) },
-                            widgets = {
-                                WidgetsPreviewScreen(
-                                    todayShift = events.firstOrNull { it.date == today },
-                                    tomorrowShift = events.firstOrNull { it.date == today.plusDays(1) },
-                                    nextAlarm = LocalDateTime.now().let { now ->
-                                        alarms.filter { it.enabled && LocalDateTime.of(it.date, it.triggerTime).isAfter(now) }
-                                            .minByOrNull { LocalDateTime.of(it.date, it.triggerTime) }
-                                    },
+                        3 -> {
+                            // 分頁一直組好，所以要告訴碼錶／計時「現在看不看得到」：看不到時停止每幀更新，App 才能真正閒置
+                            val toolsVisible by remember {
+                                derivedStateOf { kotlin.math.abs(tabPagerState.currentPage + tabPagerState.currentPageOffsetFraction - 3f) < 1f }
+                            }
+                            CompositionLocalProvider(LocalTabVisible provides toolsVisible) {
+                                ToolsScreen(
+                                    section = toolSection,
                                     theme = currentTheme,
-                                    effectiveAccent = effectiveAccent,
-                                    showTitle = false
+                                    onSectionChange = { toolSection = it; ToolNav.save(context, it) },
+                                    weather = { WeatherScreen(theme = currentTheme, events = events, alarms = alarms) },
+                                    stopwatch = { StopwatchScreen(currentTheme) },
+                                    timer = { TimerScreen(currentTheme) },
+                                    widgets = {
+                                        WidgetsPreviewScreen(
+                                            events = events,
+                                            holidayPolicy = holidayPolicy,
+                                            weekStartsOnMonday = appPrefs.weekStartsOnMonday,
+                                            nextAlarm = LocalDateTime.now().let { now ->
+                                                alarms.filter { it.enabled && LocalDateTime.of(it.date, it.triggerTime).isAfter(now) }
+                                                    .minByOrNull { LocalDateTime.of(it.date, it.triggerTime) }
+                                            },
+                                            theme = currentTheme,
+                                            effectiveAccent = effectiveAccent,
+                                            showTitle = false
+                                        )
+                                    }
                                 )
                             }
-                        )
+                        }
 
                         4 -> AiScheduleScreen(
                             state = aiChat,
                             templates = templates,
                             events = events,
-                            baseMonth = currentYearMonth,
+                            baseMonth = { currentYearMonth },
                             holidayPolicy = holidayPolicy,
                             theme = currentTheme,
                             onApply = { plan, clears -> applySchedulePlan(plan, clears) }
@@ -1626,7 +1549,7 @@ fun ReverieAlarmApp() {
                     }
                     }
 
-                    if (selectedTab == 0 && batchMode) {
+                    if (showBatchBar) {
                         Surface(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
@@ -1713,6 +1636,7 @@ fun ReverieAlarmApp() {
                     }
                 }
             }
+            } // 背景（底色＋星星）
         }
 
         // 編輯排班與私人多媒體備忘 BottomSheet
@@ -2058,171 +1982,18 @@ fun CalendarScreen(
         }
     }
 
-    @Composable
-    fun MonthGridPage(ym: YearMonth) {
-        val firstDayOfMonth = ym.atDay(1)
-        val leadingEmpty = if (weekStartsOnMonday) firstDayOfMonth.dayOfWeek.value - 1 else firstDayOfMonth.dayOfWeek.value % 7
-        val daysInMonth = ym.lengthOfMonth()
-        val rows = (leadingEmpty + daysInMonth + 6) / 7
-        Column(verticalArrangement = Arrangement.spacedBy(CAL_ROW_GAP.dp), modifier = Modifier.fillMaxWidth()) {
-            for (r in 0 until rows) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    for (c in 0 until 7) {
-                        val index = r * 7 + c
-                        val dayNum = index - leadingEmpty + 1
-                        val inMonth = dayNum in 1..daysInMonth
-                        // 上／下個月的日子也畫出來（淡化、不能點），月曆看起來比較完整
-                        val cellDate = firstDayOfMonth.plusDays((index - leadingEmpty).toLong())
-                        val isToday = inMonth && cellDate == today
-                        val isSelected = inMonth && cellDate == selectedDate
-                        val isBatchSel = inMonth && batchSelectedDates.contains(cellDate)
-                        val cellEvent = events.firstOrNull { it.date == cellDate }
-                        val hasActiveAlarm = inMonth && alarms.any { it.date == cellDate && it.enabled }
-                        val hasNote = !cellEvent?.note.isNullOrBlank() || !cellEvent?.attachments.isNullOrEmpty()
-                        // 國定假日：紅字＋假日名稱（有排班時名稱讓給班別，以排班為準）
-                        val holiday = if (inMonth) holidayPolicy.holidayOn(cellDate) else null
-                        // 我這天放假（我排的休假，或見紅休的國定假日）＋對方也休
-                        val isMutualOff = inMonth && partnerOffDates.contains(cellDate.toString()) &&
-                            DayResolver.resolve(cellDate, events, holidayPolicy).isOff
-                        val gridBg = effectiveCardBg
-                        val light = theme.isCalCellLight
-
-                        // 底塊：選取 = 強調色實心；有排班 = 班別色淡淡的底；沒排班 = 透明
-                        val tileBg = when {
-                            isSelected -> effectiveAccent.darkenForWhiteText()
-                            cellEvent != null -> mixColor(cellEvent.type.accentDot, if (light) 0.16f else 0.22f, gridBg)
-                            else -> Color.Transparent
-                        }
-                        val surfaceBg = if (tileBg == Color.Transparent) gridBg else tileBg
-                        val dow = cellDate.dayOfWeek
-                        val numberColor = when {
-                            isSelected -> Color.White
-                            isToday -> effectiveAccent.readableOn(surfaceBg, 4.5)
-                            holiday != null || dow == java.time.DayOfWeek.SUNDAY -> ROSE.readableOn(surfaceBg, 4.5)
-                            dow == java.time.DayOfWeek.SATURDAY -> Color(0xFF3B82F6).readableOn(surfaceBg, 4.5)
-                            else -> theme.calCellText.readableOn(surfaceBg, 4.5)
-                        }
-                        val ring = when {
-                            isBatchSel -> Color(0xFFF59E0B)
-                            isMutualOff && !isSelected -> EMERALD.readableOn(gridBg, 3.0)
-                            isToday && !isSelected -> effectiveAccent.readableOn(gridBg, 3.0)
-                            else -> Color.Transparent
-                        }
-                        val bounce by rememberBounceScale(
-                            key = cellEvent?.let { "${it.id}|${it.title}|${it.type}" },
-                            resetKey = cellDate
-                        )
-                        val shape = RoundedCornerShape(14.dp)
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(CAL_CELL_HEIGHT.dp)
-                                .graphicsLayer {
-                                    alpha = if (inMonth) 1f else 0.32f
-                                    if (inMonth) { scaleX = bounce; scaleY = bounce }
-                                }
-                                .then(
-                                    if (isSelected) Modifier.shadow(6.dp, shape, ambientColor = effectiveAccent, spotColor = effectiveAccent)
-                                    else Modifier
-                                )
-                                .clip(shape)
-                                .background(tileBg)
-                                .border(if (ring != Color.Transparent) 1.5.dp else 0.dp, ring, shape)
-                                .then(if (inMonth) Modifier.clickable { onDateClick(cellDate) } else Modifier),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // 選取格子時浮出「編輯」膠囊（第一排改放到格子下方）
-                            if (inMonth) {
-                                MotionHost(quickCapsuleDate == cellDate) {
-                                    EditCapsulePopup(isFirstRow = r == 0, theme = theme, onEdit = onOpenEditSheet)
-                                }
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = cellDate.dayOfMonth.toString(),
-                                    color = numberColor,
-                                    fontSize = (19 * fontScale).sp,
-                                    fontWeight = if (isSelected || isToday) FontWeight.Black else FontWeight.Bold,
-                                    lineHeight = (21 * fontScale).sp
-                                )
-                                // 數字下方：班別名稱；沒排班的國定假日顯示假日名稱（紅字）；都沒有就留白，讓數字保持同一高度
-                                Text(
-                                    text = cellEvent?.title?.let { shortShiftName(it) } ?: holiday?.let { tr(it.short) } ?: " ",
-                                    color = when {
-                                        cellEvent == null && holiday == null -> Color.Transparent
-                                        isSelected -> Color.White.copy(alpha = 0.92f)
-                                        cellEvent == null -> ROSE.readableOn(surfaceBg, 4.5)
-                                        else -> cellEvent.type.chipText(light).readableOn(surfaceBg, 4.5)
-                                    },
-                                    fontSize = (11 * fontScale).sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    lineHeight = (13 * fontScale).sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(horizontal = 3.dp)
-                                )
-                            }
-                            // 右上角：當天有開啟的鬧鐘
-                            if (hasActiveAlarm) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(top = 3.dp, end = 3.dp)
-                                        .size(14.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSelected) Color.White else ROSE.darkenForWhiteText()),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Tabler.Bell, contentDescription = tr("有鬧鐘"),
-                                        tint = if (isSelected) effectiveAccent.darkenForWhiteText() else Color.White,
-                                        modifier = Modifier.size(9.dp)
-                                    )
-                                }
-                            }
-                            // 左上角：未來幾天的天氣小圖示
-                            val dayWx = if (inMonth && !isMutualOff && !cellDate.isBefore(today)) {
-                                WeatherRepo.data?.takeIf { it.place == WeatherRepo.place }?.day(cellDate)
-                            } else null
-                            if (dayWx != null) {
-                                Icon(
-                                    wxIcon(dayWx.code), contentDescription = wxText(dayWx.code),
-                                    tint = if (isSelected) Color.White.copy(alpha = 0.9f) else Color(0xFF38BDF8).readableOn(surfaceBg, 3.0),
-                                    modifier = Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 4.dp).size(11.dp)
-                                )
-                            }
-                            // 左上角：雙方共同休假
-                            if (isMutualOff) {
-                                Icon(
-                                    Tabler.Hearts, contentDescription = tr("共同休假"),
-                                    tint = if (isSelected) Color.White else EMERALD.readableOn(surfaceBg, 3.0),
-                                    modifier = Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 4.dp).size(11.dp)
-                                )
-                            }
-                            // 底部小圓點：有私人備註或附件
-                            if (hasNote) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .padding(bottom = 4.dp)
-                                        .size(4.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSelected) Color.White else Color(0xFF7DD3FC).readableOn(surfaceBg, 3.0))
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // 月曆用的查表：資料變了才重建，格子裡 O(1) 查（原本每一格都掃一次整份班表與鬧鐘清單）。
+    // events／alarms 是 SnapshotStateList 時，derivedStateOf 會在內容改變時自動重算
+    val eventByDate by remember(events) { derivedStateOf { firstEventByDate(events) } }
+    val activeAlarmDates by remember(alarms) { derivedStateOf { activeAlarmDatesOf(alarms) } }
+    val batchSet by remember(batchSelectedDates) { derivedStateOf { batchSelectedDates.toHashSet() } }
+    val partnerOffSet = remember(partnerOffDates) {
+        partnerOffDates.mapNotNullTo(HashSet()) { runCatching { LocalDate.parse(it) }.getOrNull() }
     }
+    val weather = WeatherRepo.data?.takeIf { it.place == WeatherRepo.place }
 
-    val selectedEvent = events.firstOrNull { it.date == selectedDate }
-    val selectedStatus = DayResolver.resolve(selectedDate, events, holidayPolicy)
+    val selectedEvent = eventByDate[selectedDate]
+    val selectedStatus = DayResolver.resolveDay(selectedDate, selectedEvent, holidayPolicy)
     val selectedDayAlarms = alarms.filter { it.date == selectedDate }.sortedBy { it.triggerTime }
     val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
     val shortTimeFormatter = remember { DateTimeFormatter.ofPattern("HH") }
@@ -2317,17 +2088,20 @@ fun CalendarScreen(
         // 月曆格子：跟手雙月並排拖曳（左右拖曳時帶出上／下個月，放開依距離與速度吸附或回彈）
         item {
             val pager = monthPagerState
-            val density = LocalDensity.current
-            // 高度隨拖曳在兩個月的列數之間平滑變化（5 列 ↔ 6 列）
-            val frac = pager.currentPageOffsetFraction
-            val fromRows = monthRows(monthOfPage(pager.currentPage), weekStartsOnMonday)
-            val toRows = monthRows(monthOfPage(pager.currentPage + if (frac >= 0f) 1 else -1), weekStartsOnMonday)
-            val gridHeight = gridHeightFor(fromRows) + (gridHeightFor(toRows) - gridHeightFor(fromRows)) * kotlin.math.abs(frac)
             HorizontalPager(
                 state = pager,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(gridHeight)
+                    // 高度隨拖曳在兩個月的列數之間平滑變化（5 列 ↔ 6 列）。
+                    // 拖曳位置每一幀都在變，所以只在「排版階段」讀：滑動時只重新排版，不會整個月曆重組
+                    .layout { measurable, constraints ->
+                        val frac = pager.currentPageOffsetFraction
+                        val from = gridHeightFor(monthRows(monthOfPage(pager.currentPage), weekStartsOnMonday))
+                        val to = gridHeightFor(monthRows(monthOfPage(pager.currentPage + if (frac >= 0f) 1 else -1), weekStartsOnMonday))
+                        val h = (from + (to - from) * kotlin.math.abs(frac)).roundToPx()
+                        val placeable = measurable.measure(constraints.copy(minHeight = h, maxHeight = h))
+                        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                    }
                     .clip(RoundedCornerShape(22.dp))
                     .background(effectiveCardBg)
                     .border(
@@ -2341,7 +2115,25 @@ fun CalendarScreen(
                 verticalAlignment = Alignment.Top,
                 key = { it }
             ) { page ->
-                MonthGridPage(monthOfPage(page))
+                MonthGrid(
+                    ym = monthOfPage(page),
+                    weekStartsOnMonday = weekStartsOnMonday,
+                    today = today,
+                    selectedDate = selectedDate,
+                    quickCapsuleDate = quickCapsuleDate,
+                    eventByDate = eventByDate,
+                    activeAlarmDates = activeAlarmDates,
+                    batchSelected = batchSet,
+                    partnerOff = partnerOffSet,
+                    holidayPolicy = holidayPolicy,
+                    weather = weather,
+                    fontScale = fontScale,
+                    theme = theme,
+                    effectiveAccent = effectiveAccent,
+                    effectiveCardBg = effectiveCardBg,
+                    onDateClick = onDateClick,
+                    onOpenEditSheet = onOpenEditSheet
+                )
             }
         }
 
@@ -2544,6 +2336,12 @@ fun CalendarScreen(
     }
 }
 
+/** 返回鍵：要不要攔截由這個小元件自己讀（點日期、換分頁時只有它重組，不是整個主畫面） */
+@Composable
+private fun AppBackHandler(enabled: () -> Boolean, onBack: () -> Unit) {
+    androidx.activity.compose.BackHandler(enabled = enabled(), onBack = onBack)
+}
+
 // ---- 月份分頁器工具：第 N 頁 = 2000 年 1 月起算第 N 個月 ----
 private val MONTH_PAGE_BASE: YearMonth = YearMonth.of(2000, 1)
 const val MONTH_PAGE_COUNT = 12 * 200
@@ -2578,177 +2376,4 @@ private fun getFileNameFromUri(context: Context, uri: Uri): String {
     return name
 }
 
-// ============================================================================
-// 11. 分頁五：原生桌面小工具預覽與一鍵釘選
-// ============================================================================
-@Composable
-fun WidgetsPreviewScreen(todayShift: ShiftEvent?, tomorrowShift: ShiftEvent?, nextAlarm: ShiftAlarm?, theme: ThemePalette, effectiveAccent: Color, showTitle: Boolean = true) {
-    val context = LocalContext.current
-    val hm = remember { DateTimeFormatter.ofPattern("HH:mm") }
-    val today = LocalDate.now()
-    val week = listOf(tr("週一"), tr("週二"), tr("週三"), tr("週四"), tr("週五"), tr("週六"), tr("週日"))
-
-    // 桌面上已經有幾個小工具（回到這頁時重新檢查）
-    var pinnedCount by remember { mutableStateOf(0) }
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle) {
-        fun check() {
-            pinnedCount = runCatching {
-                AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, ShiftWidgetProvider::class.java)).size
-            }.getOrDefault(0)
-        }
-        check()
-        val obs = androidx.lifecycle.LifecycleEventObserver { _, e -> if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) check() }
-        lifecycle.addObserver(obs)
-        onDispose { lifecycle.removeObserver(obs) }
-    }
-
-    fun requestPin() {
-        val mgr = AppWidgetManager.getInstance(context)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && mgr.isRequestPinAppWidgetSupported) {
-            runCatching { mgr.requestPinAppWidget(ComponentName(context, ShiftWidgetProvider::class.java), null, null) }
-                .onFailure { AppToast.show(tr("這個桌面不支援一鍵新增，請照下方步驟手動加入")) }
-        } else {
-            AppToast.show(tr("這個桌面不支援一鍵新增，請照下方步驟手動加入"))
-        }
-    }
-
-    // 和 ShiftWidget.kt 的文字一致
-    fun describe(s: ShiftEvent?): String = when {
-        s == null -> tr("尚未排班")
-        s.type == ShiftType.OFF -> tr("{0} · 全天休假", tr(s.title))
-        else -> "${tr(s.title)} · ${s.startTime.format(hm)} - ${s.endTime.format(hm)}"
-    }
-    fun dotColor(s: ShiftEvent?): Color = when (s?.type) {
-        null -> Color(0xFF94A3B8)
-        else -> s.type.accentDot
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (showTitle) Text(tr("桌面小工具"), fontSize = 17.sp, fontWeight = FontWeight.Black, color = theme.textMain)
-                Text(tr("不用打開 App，在手機桌面就看得到今天的班和下一個鬧鐘"), fontSize = 11.sp, color = theme.textMuted, lineHeight = 16.sp)
-            }
-        }
-
-        // 預覽：放在像桌布的背景上，樣子和實際小工具相同
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(
-                        androidx.compose.ui.graphics.Brush.linearGradient(
-                            listOf(effectiveAccent.copy(alpha = 0.55f), Color(0xFF1E293B), Color(0xFF0F172A))
-                        )
-                    )
-                    .padding(horizontal = 18.dp, vertical = 22.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(Color(0xF0131A2A))
-                        .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(22.dp))
-                        .padding(14.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Reverie Alarm", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.weight(1f))
-                        Text("${today.monthValue}/${today.dayOfMonth} ${week[today.dayOfWeek.value - 1]}", fontSize = 11.sp, color = Color(0xFF94A3B8))
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(9.dp).clip(CircleShape).background(dotColor(todayShift)))
-                        Spacer(Modifier.width(7.dp))
-                        Text(describe(todayShift), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF1F5F9), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    Text(tr("明日：") + describe(tomorrowShift), fontSize = 11.sp, color = Color(0xFF94A3B8), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-                    Spacer(Modifier.weight(1f))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            nextAlarm?.triggerTime?.format(hm) ?: "--:--",
-                            fontSize = 26.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Color(0xFFF1F5F9)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            when {
-                                nextAlarm == null -> tr("目前沒有排定的鬧鐘")
-                                else -> {
-                                    val day = when (nextAlarm.date) {
-                                        today -> tr("今天")
-                                        today.plusDays(1) -> tr("明天")
-                                        else -> "${nextAlarm.date.monthValue}/${nextAlarm.date.dayOfMonth}"
-                                    }
-                                    "$day · ${nextAlarm.label}"
-                                }
-                            },
-                            fontSize = 11.sp, color = Color(0xFFCBD5E1), maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 15.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        // 加到桌面
-        item {
-            WebCard(theme, radius = 24.dp, padding = 16.dp) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val on = pinnedCount > 0
-                        Box(
-                            modifier = Modifier.size(38.dp).clip(RoundedCornerShape(12.dp))
-                                .background((if (on) EMERALD else effectiveAccent).copy(alpha = 0.16f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                if (on) Tabler.CircleCheck else Tabler.DeviceMobile, contentDescription = null,
-                                tint = (if (on) EMERALD else effectiveAccent).readable(3.0), modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(if (on) tr("已經在桌面上了") else tr("還沒加到桌面"), fontSize = 14.sp, fontWeight = FontWeight.Black, color = theme.textMain)
-                            Text(
-                                if (on) tr("共 {0} 個，班表和鬧鐘有變動會自動更新", pinnedCount) else tr("大小 4×2，點一下小工具就能打開 App"),
-                                fontSize = 11.sp, color = theme.textMuted
-                            )
-                        }
-                    }
-                    WebButton(
-                        if (pinnedCount > 0) tr("再加一個到桌面") else tr("加到桌面"), theme, Modifier.fillMaxWidth(),
-                        filled = pinnedCount == 0, icon = Tabler.Pin, fontSize = 14.sp, vertical = 12.dp
-                    ) { requestPin() }
-                }
-            }
-        }
-
-        // 手動加入的步驟
-        item {
-            WebCard(theme, radius = 24.dp, padding = 16.dp) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(tr("按了沒反應？也可以手動加入"), fontSize = 13.sp, fontWeight = FontWeight.Black, color = theme.textMain)
-                    listOf(
-                        tr("回到手機桌面，長按空白的地方"),
-                        tr("點選「小工具」（有些手機叫「Widgets」）"),
-                        tr("找到 Reverie Alarm，把 4×2 卡片拖到桌面")
-                    ).forEachIndexed { i, step ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier.size(24.dp).clip(CircleShape).background(theme.bgElevated).border(1.dp, theme.borderColor, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) { Text("${i + 1}", fontSize = 12.sp, fontWeight = FontWeight.Black, color = theme.accentText) }
-                            Spacer(Modifier.width(10.dp))
-                            Text(step, fontSize = 13.sp, color = theme.textMain.copy(alpha = 0.9f), lineHeight = 18.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+// 桌面小工具頁（預覽與一鍵加到桌面）在 WidgetsScreen.kt

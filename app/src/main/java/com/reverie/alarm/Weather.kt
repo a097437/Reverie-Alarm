@@ -128,7 +128,7 @@ object WeatherRepo {
     fun load(context: Context) {
         if (loaded) return
         loaded = true
-        val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val sp = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         place = sp.getString("place", null)?.let { runCatching { placeFrom(JSONObject(it)) }.getOrNull() }
         val raw = sp.getString("forecast", null)
         val alerts = sp.getString("alerts", null)
@@ -143,7 +143,7 @@ object WeatherRepo {
     fun setPlace(context: Context, p: WeatherPlace, district: String? = null) {
         place = p
         this.district = district
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("place", placeJson(p).toString())
             .putString("district", district)
             .putString("districtKey", if (district != null) keyOf(p) else null)
@@ -185,7 +185,7 @@ object WeatherRepo {
         val d =reverseGeocode(context, p.lat, p.lon).district ?: return
         if (place != p) return
         district = d
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("district", d).putString("districtKey", keyOf(p)).apply()
     }
 
@@ -207,7 +207,7 @@ object WeatherRepo {
             val alerts = withContext(Dispatchers.IO) { runCatching { fetchAlerts(p.county) }.getOrDefault(emptyList()) }
             val parsed = parseForecast(p, now, JSONObject(forecastRaw), alerts)
             data = parsed
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString("forecast", forecastRaw)
                 .putString("alerts", alertsJson(alerts).toString())
                 .putLong("fetchedAt", now)

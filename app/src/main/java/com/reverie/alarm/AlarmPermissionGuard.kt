@@ -12,6 +12,8 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,9 +64,6 @@ private fun readHealth(context: Context): AlarmHealth {
     )
 }
 
-private val isXiaomiFamily: Boolean
-    get() = Build.MANUFACTURER.lowercase().let { it.contains("xiaomi") || it.contains("redmi") || it.contains("poco") }
-
 private fun openSafely(context: Context, vararg intents: Intent) {
     for (i in intents) {
         val ok = runCatching {
@@ -87,8 +86,11 @@ fun AlarmPermissionGuard(forceShow: Boolean, onClose: () -> Unit) {
     val context = LocalContext.current
     var health by remember { mutableStateOf(readHealth(context)) }
     var dismissedThisSession by remember { mutableStateOf(false) }
-    val prefs = remember { context.getSharedPreferences("reverie_alarm_engine", Context.MODE_PRIVATE) }
-    var xiaomiAcked by remember { mutableStateOf(prefs.getBoolean("xiaomi_autostart_acked", false)) }
+    val prefs = remember { context.applicationContext.getSharedPreferences("reverie_alarm_engine", Context.MODE_PRIVATE) }
+    // 品牌自己的背景執行設定沒辦法偵測，使用者按「我已設定」後記住（舊版的小米紀錄也算）
+    var oemAcked by remember {
+        mutableStateOf(prefs.getBoolean("oem_background_acked", false) || prefs.getBoolean("xiaomi_autostart_acked", false))
+    }
 
     // 使用者跑去設定頁再回來時，自動重新檢查
     LaunchedEffect(Unit) {
@@ -98,11 +100,11 @@ fun AlarmPermissionGuard(forceShow: Boolean, onClose: () -> Unit) {
         }
     }
 
-    val needsAttention = !health.allCriticalOk || !health.batteryUnrestricted || (isXiaomiFamily && !xiaomiAcked)
+    val needsAttention = !health.allCriticalOk || !health.batteryUnrestricted || (OemBackground.needsExtraStep && !oemAcked)
     val visible = forceShow || (needsAttention && !dismissedThisSession)
-    MotionHost(visible) { AlarmHealthDialog(health, xiaomiAcked, onAckXiaomi = {
-        xiaomiAcked = true
-        prefs.edit().putBoolean("xiaomi_autostart_acked", true).apply()
+    MotionHost(visible) { AlarmHealthDialog(health, oemAcked, onAckOem = {
+        oemAcked = true
+        prefs.edit().putBoolean("oem_background_acked", true).apply()
     }, onClose = {
         dismissedThisSession = true
         onClose()
@@ -110,8 +112,10 @@ fun AlarmPermissionGuard(forceShow: Boolean, onClose: () -> Unit) {
 }
 
 @Composable
-private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXiaomi: () -> Unit, onClose: () -> Unit) {
+private fun AlarmHealthDialog(health: AlarmHealth, oemAcked: Boolean, onAckOem: () -> Unit, onClose: () -> Unit) {
     val context = LocalContext.current
+    val oem = remember { OemBackground.guide(context) }
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
     val close = onClose
 
@@ -181,19 +185,26 @@ private fun AlarmHealthDialog(health: AlarmHealth, xiaomiAcked: Boolean, onAckXi
                         )
                     }
                 )
-                if (isXiaomiFamily) {
+                // 各品牌自己的省電機制（小米、華為、OPPO、vivo、三星…）；原生 Android 不需要
+                if (oem != null) {
                     HealthRow(
-                        ok = xiaomiAcked,
-                        title = tr("小米：自啟動＋省電策略"),
-                        desc = tr("在應用程式資訊頁開啟「自啟動」，省電策略選「無限制」，開好後按「我已設定」"),
-                        fixLabel = if (xiaomiAcked) tr("重新開啟") else tr("前往開啟"),
-                        onFix = { openSafely(context, appDetailsIntent(context)) },
-                        extraLabel = if (xiaomiAcked) null else tr("我已設定"),
-                        onExtra = {
-                            onAckXiaomi()
-                        }
+                        ok = oemAcked,
+                        title = tr("{0}：背景執行與自動啟動", oem.brand),
+                        desc = oem.steps + tr("。這一項系統查不到，開好後請按「我已設定」"),
+                        onFix = { openSafely(context, *oem.intents.toTypedArray()) },
+                        extraLabel = if (oemAcked) null else tr("我已設定"),
+                        onExtra = onAckOem
                     )
                 }
+                // 每支手機設定的位置不太一樣：附上社群整理的各品牌教學
+                Text(
+                    if (oem != null) tr("找不到設定？查看 {0} 的詳細教學 →", oem.brand) else tr("鬧鐘偶爾不響？查看各品牌手機的設定教學 →"),
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF60A5FA),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { runCatching { uriHandler.openUri(oem?.helpUrl ?: OemBackground.GENERIC_HELP) } }
+                        .padding(vertical = 4.dp)
+                )
             }
         },
         confirmButton = {

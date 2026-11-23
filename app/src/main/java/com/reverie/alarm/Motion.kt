@@ -70,7 +70,9 @@ import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 // ============================================================================
@@ -396,17 +398,26 @@ fun MotionDropdownMenu(
 @Composable
 fun rememberBounceScale(key: Any?, resetKey: Any?): State<Float> {
     val scale = remember(resetKey) { Animatable(1f) }
-    var last by remember(resetKey) { mutableStateOf(key) }
-    LaunchedEffect(resetKey, key) {
-        if (key != null && key != last && Motion.enabled) {
-            scale.snapTo(1f)
-            scale.animateTo(1f, keyframes {
-                durationMillis = Motion.ms(380).coerceAtLeast(1)
-                1.24f at (durationMillis * 0.38f).toInt() using Motion.EnterEasing
-                0.94f at (durationMillis * 0.7f).toInt()
-            })
+    // 上一次的 key：一般陣列不是 Compose 狀態，只拿來比較，不會觸發重組
+    val last = remember(resetKey) { arrayOf(key) }
+    // key 真的變了才啟動協程：月曆一頁幾十格，平常不必每一格都開一個
+    if (key != last[0]) {
+        LaunchedEffect(resetKey, key) {
+            try {
+                if (key != null && Motion.enabled) {
+                    scale.snapTo(1f)
+                    scale.animateTo(1f, keyframes {
+                        durationMillis = Motion.ms(380).coerceAtLeast(1)
+                        1.24f at (durationMillis * 0.38f).toInt() using Motion.EnterEasing
+                        0.94f at (durationMillis * 0.7f).toInt()
+                    })
+                }
+                last[0] = key
+            } finally {
+                // 動畫被中途打斷時回到原本大小，不會停在放大的狀態
+                if (scale.value != 1f) withContext(NonCancellable) { scale.snapTo(1f) }
+            }
         }
-        last = key
     }
     return scale.asState()
 }

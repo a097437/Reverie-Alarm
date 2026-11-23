@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Reverie Alarm</string>
-    <string name="widget_description">今日班表與下一個鬧鐘</string>
+    <string name="widget_description">今日班表與下一個鬧鐘（4×2）</string>
+    <string name="widget_small_description">今天的班與下一個鬧鐘（2×2）</string>
+    <string name="widget_weeks_description">兩週班表（5×2）</string>
+    <string name="widget_month_description">整月班表（5×5）</string>
 </resources>

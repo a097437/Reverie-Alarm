@@ -51,18 +51,18 @@ object GuardPrefs {
     private const val KEY_NO_ALARM = "no_alarm_dismissed"
 
     fun dismissed(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DISMISSED, "") ?: ""
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_DISMISSED, "") ?: ""
 
     fun setDismissed(context: Context, key: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_DISMISSED, key).apply()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_DISMISSED, key).apply()
     }
 
     /** 「明天有班卻沒鬧鐘」按過「知道了」的那一次 */
     fun noAlarmDismissed(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_NO_ALARM, "") ?: ""
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_NO_ALARM, "") ?: ""
 
     fun setNoAlarmDismissed(context: Context, key: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_NO_ALARM, key).apply()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_NO_ALARM, key).apply()
     }
 }
 

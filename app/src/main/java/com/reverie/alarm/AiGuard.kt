@@ -77,7 +77,7 @@ object AiGuard {
     private data class Quota(val day: String, val messages: Int, val photos: Int, val lastAt: Long)
 
     private fun load(context: Context): Quota {
-        val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val sp = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val today = LocalDate.now().toString()
         val lastAt = sp.getLong("last_at", 0L)
         return if (sp.getString("day", null) != today) Quota(today, 0, 0, lastAt)
@@ -85,7 +85,7 @@ object AiGuard {
     }
 
     private fun save(context: Context, q: Quota) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("day", q.day).putInt("messages", q.messages).putInt("photos", q.photos).putLong("last_at", q.lastAt).apply()
     }
 }

@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -92,7 +93,7 @@ object CountdownTimerState {
     fun load(context: Context) {
         if (loaded) return
         loaded = true
-        val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val sp = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         status = runCatching { TimerStatus.valueOf(sp.getString("status", "IDLE")!!) }.getOrDefault(TimerStatus.IDLE)
         durationMs = sp.getLong("duration", 5 * 60_000L)
         presetMs = sp.getLong("preset", durationMs)
@@ -101,7 +102,7 @@ object CountdownTimerState {
     }
 
     private fun save(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("status", status.name).putLong("duration", durationMs).putLong("preset", presetMs)
             .putLong("end_at", endAt).putLong("paused_remaining", pausedRemaining).apply()
         ToolNotifications.updateTimer(context)
@@ -205,6 +206,19 @@ fun formatTimer(ms: Long): String {
 
 private val PRESETS = listOf(1, 3, 5, 10, 15, 30, 60) // 分鐘
 private val HM = DateTimeFormatter.ofPattern("HH:mm")
+/** 數字等寬：倒數時寬度不變、不會左右晃 */
+private val TIMER_DIGITS = TextStyle(fontFeatureSettings = "tnum")
+
+/** 「將在幾點結束」：自己每 10 秒更新，不必讓整個設定畫面（三個滾輪）跟著重組 */
+@Composable
+private fun TimerEndHint(total: Long, theme: ThemePalette) {
+    var now by remember { mutableStateOf(LocalDateTime.now()) }
+    LaunchedEffect(Unit) { while (true) { delay(10_000L); now = LocalDateTime.now() } }
+    Text(
+        if (total > 0) tr("將在 {0} 結束", now.plusSeconds(total / 1000).format(HM)) else tr("請先設定時間"),
+        fontSize = 13.sp, color = theme.textMuted
+    )
+}
 
 @Composable
 fun TimerScreen(theme: ThemePalette) {
@@ -233,9 +247,6 @@ private fun TimerSetup(theme: ThemePalette) {
     var s by remember { mutableIntStateOf((initial % 60).toInt()) }
     var wheelKey by remember { mutableIntStateOf(0) } // 按常用時間時重建滾輪
     val total = (h * 3600L + m * 60L + s) * 1000L
-    // 「將在幾點結束」每 10 秒更新一次
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
-    LaunchedEffect(Unit) { while (true) { delay(10_000L); now = LocalDateTime.now() } }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp),
@@ -279,10 +290,7 @@ private fun TimerSetup(theme: ThemePalette) {
             }
         }
         Spacer(Modifier.height(14.dp))
-        Text(
-            if (total > 0) tr("將在 {0} 結束", now.plusSeconds(total / 1000).format(HM)) else tr("請先設定時間"),
-            fontSize = 13.sp, color = theme.textMuted
-        )
+        TimerEndHint(total, theme)
         Spacer(Modifier.height(18.dp))
         ToolRoundButton(
             label = tr("開始"), enabled = total > 0,
@@ -298,25 +306,31 @@ private fun TimerSetup(theme: ThemePalette) {
 private fun TimerRunning(theme: ThemePalette) {
     val context = LocalContext.current
     val st = CountdownTimerState.status
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    // 倒數中每一格畫面更新（進度環才會平順）；時間到之後只要每半秒更新「已超過」
-    LaunchedEffect(st, CountdownTimerState.endAt) {
-        now = System.currentTimeMillis()
-        while (CountdownTimerState.status == TimerStatus.RUNNING) {
-            if (CountdownTimerState.isFinished()) { delay(500L); now = System.currentTimeMillis() }
-            else withFrameMillis { now = System.currentTimeMillis() }
+    // 倒數中每一幀更新（進度環才會平順）；時間到之後只要每半秒更新「已超過」。
+    // 「工具」分頁不在畫面上時停止更新（時間是用結束的時間點算的，回來時一樣準）
+    val visible = LocalTabVisible.current
+    val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(st, CountdownTimerState.endAt, visible) {
+        clock.longValue = System.currentTimeMillis()
+        while (visible && CountdownTimerState.status == TimerStatus.RUNNING) {
+            if (CountdownTimerState.isFinished()) { delay(500L); clock.longValue = System.currentTimeMillis() }
+            else withFrameMillis { clock.longValue = System.currentTimeMillis() }
         }
     }
-    val digits = TextStyle(fontFeatureSettings = "tnum")
-    val remaining = CountdownTimerState.remaining(now)
-    val finished = CountdownTimerState.isFinished(now)
+    // 數字一秒才變一次：用 derivedStateOf 換算成「秒」，這個畫面一秒最多重組一次；
+    // 每一幀都要動的只有進度環，它在 Canvas 的繪製區塊裡自己讀時間
+    val remainingSec by remember { derivedStateOf { (CountdownTimerState.remaining(clock.longValue) + 999) / 1000 } }
+    val finished by remember { derivedStateOf { CountdownTimerState.isFinished(clock.longValue) } }
+    val overSec by remember {
+        derivedStateOf { ((clock.longValue - CountdownTimerState.endAt).coerceAtLeast(0L) + 999) / 1000 }
+    }
+    val digits = TIMER_DIGITS
     val total = CountdownTimerState.durationMs.coerceAtLeast(1L)
-    val fraction = (remaining.toFloat() / total).coerceIn(0f, 1f)
     // 最後 10 秒變琥珀色提醒，時間到變紅色
-    val ringColor by animateColorAsState(
+    val ringColor = animateColorAsState(
         when {
             finished -> ROSE
-            st == TimerStatus.RUNNING && remaining <= 10_000L -> AMBER
+            st == TimerStatus.RUNNING && remainingSec <= 10L -> AMBER
             else -> theme.accent
         },
         tween(400), label = "timerRing"
@@ -330,24 +344,28 @@ private fun TimerRunning(theme: ThemePalette) {
         Spacer(Modifier.height(24.dp))
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(280.dp)) {
             Canvas(Modifier.fillMaxSize()) {
+                // 繪製階段才讀時間：每一幀只重畫這個圓環，不會重組整個畫面
+                val now = clock.longValue
+                val fraction = (CountdownTimerState.remaining(now).toFloat() / total).coerceIn(0f, 1f)
                 val stroke = 12.dp.toPx()
                 val inset = stroke / 2
                 val arcSize = Size(size.width - stroke, size.height - stroke)
                 drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
                 // 剩下的部分：從 12 點方向開始，隨時間縮短
-                drawArc(ringColor, -90f, 360f * (if (finished) 1f else fraction), false, Offset(inset, inset), arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+                val sweep = 360f * (if (CountdownTimerState.isFinished(now)) 1f else fraction)
+                drawArc(ringColor.value, -90f, sweep, false, Offset(inset, inset), arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    if (finished) tr("時間到") else formatTimer(remaining), style = digits,
-                    fontSize = if (finished) 40.sp else if (remaining >= 3_600_000) 46.sp else 58.sp,
+                    if (finished) tr("時間到") else formatTimer(remainingSec * 1000), style = digits,
+                    fontSize = if (finished) 40.sp else if (remainingSec * 1000 >= 3_600_000) 46.sp else 58.sp,
                     fontWeight = if (finished) FontWeight.Black else FontWeight.Light,
                     color = if (finished) ROSE.readable() else theme.textMain
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     when {
-                        finished -> tr("已超過 {0}", formatTimer((now - CountdownTimerState.endAt).coerceAtLeast(0L)))
+                        finished -> tr("已超過 {0}", formatTimer(overSec * 1000))
                         st == TimerStatus.PAUSED -> tr("已暫停")
                         else -> tr("{0} 結束", CountdownTimerState.endTime().format(HM))
                     },

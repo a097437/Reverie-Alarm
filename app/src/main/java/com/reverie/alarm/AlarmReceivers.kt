@@ -31,8 +31,9 @@ class AlarmReceiver : BroadcastReceiver() {
         AlarmEngine.removeSpec(context, key)
         // 計時器時間到：收掉倒數通知，改由響鈴接手
         if (key.startsWith(AlarmEngine.TIMER_PREFIX)) ToolNotifications.cancelTimer(context)
-        // 桌面小工具改顯示下一個鬧鐘
-        runCatching { ShiftWidgetProvider.refresh(context) }
+        // 桌面小工具改顯示下一個鬧鐘（背景執行緒做；接著啟動的響鈴服務會讓 App 一直活著）
+        val app = context.applicationContext
+        WidgetWork.post { ShiftWidgetProvider.refresh(app) }
 
         val serviceIntent = Intent(context, AlarmRingService::class.java).apply {
             action = AlarmRingService.ACTION_START
@@ -61,13 +62,13 @@ class AlarmRestoreReceiver : BroadcastReceiver() {
             "com.htc.intent.action.QUICKBOOT_POWERON" -> {
                 AppLog.i("Alarm", "系統事件：${intent.action}，重新排程")
                 AlarmEngine.rescheduleAll(context)
-                runCatching { ShiftWidgetProvider.refresh(context) }
                 runCatching { ToolNotifications.restore(context) }
-                // 前一晚提醒也要重新排（設定要從存檔讀，改在背景做）
+                // 小工具與前一晚提醒（設定要從存檔讀）都在背景做
                 val app = context.applicationContext
                 val pending = goAsync()
                 scope.launch {
                     try {
+                        runCatching { ShiftWidgetProvider.refresh(app) }
                         EveningGuard.scheduleFromStore(app)
                     } catch (e: Exception) {
                         AppLog.w("Guard", "重新排前一晚提醒失敗", e)

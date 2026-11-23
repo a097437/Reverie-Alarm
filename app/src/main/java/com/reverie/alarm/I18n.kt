@@ -35,15 +35,16 @@ object I18n {
     fun ensure(context: Context) {
         if (ready) return
         ready = true
-        choice = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "system") ?: "system"
+        choice = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "system") ?: "system"
         lang = resolve(context, choice)
     }
 
     fun setChoice(context: Context, value: String) {
         choice = value
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, value).apply()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, value).apply()
         lang = resolve(context, value)
-        runCatching { ShiftWidgetProvider.refresh(context) }
+        val app = context.applicationContext
+        WidgetWork.post { ShiftWidgetProvider.refresh(app) }
     }
 
     /** 跟隨系統：中文（任何 zh）用繁體中文，其他語言都用英文 */

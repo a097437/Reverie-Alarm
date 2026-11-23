@@ -112,7 +112,8 @@ fun AiScheduleScreen(
     state: AiChatState,
     templates: List<ShiftTemplate>,
     events: List<ShiftEvent>,
-    baseMonth: YearMonth,
+    /** 日曆目前在看的月份：只在送出排班時才讀（傳函式），換月份時這一頁不必重組 */
+    baseMonth: () -> YearMonth,
     holidayPolicy: HolidayPolicy,
     theme: ThemePalette,
     onApply: (Map<LocalDate, ShiftTemplate>, Set<LocalDate>) -> Unit
@@ -175,7 +176,7 @@ fun AiScheduleScreen(
 
     // ---- 送出 ----
     fun localParse(text: String, note: String? = null) {
-        val p = QuickScheduleParser.parse(text, templates.map { it.title }, offTpl?.title, LocalDate.now(), baseMonth)
+        val p = QuickScheduleParser.parse(text, templates.map { it.title }, offTpl?.title, LocalDate.now(), baseMonth())
         state.plan = (state.plan - p.clears) + p.days
         state.clears = (state.clears - p.days.keys) + p.clears
         val msg = buildString {
@@ -209,7 +210,7 @@ fun AiScheduleScreen(
         AiGuard.record(context, img != null)
         scope.launch {
             try {
-                val system = AiSchedule.systemPrompt(templates, LocalDate.now(), baseMonth, user?.name, AiPrefs.rosterName(context), events)
+                val system = AiSchedule.systemPrompt(templates, LocalDate.now(), baseMonth(), user?.name, AiPrefs.rosterName(context), events)
                 val r = AiSchedule.send(context, system, state.turns.toList())
                 state.turns += AiTurn(false, r.raw) // 留著完整的 JSON，下一輪修正時 Gemini 才知道目前的清單
                 state.plan = r.days

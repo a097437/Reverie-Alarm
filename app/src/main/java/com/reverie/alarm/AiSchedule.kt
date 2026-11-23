@@ -41,9 +41,9 @@ class AiException(message: String) : Exception(message)
 object AiPrefs {
     private const val PREFS = "reverie_ai"
     fun rosterName(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("roster_name", "").orEmpty()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("roster_name", "").orEmpty()
     fun setRosterName(context: Context, name: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("roster_name", name.trim()).apply()
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("roster_name", name.trim()).apply()
     }
 }
 

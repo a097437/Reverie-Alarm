@@ -26,8 +26,8 @@ android {
         applicationId = "com.reverie.alarm"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "2.5.0"
+        versionCode = 8
+        versionName = "2.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -48,6 +48,8 @@ android {
             if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
             // App Check：正式版用 Play Integrity
             buildConfigField("boolean", "APP_CHECK_DEBUG", "false")
+            // StrictMode（主執行緒讀寫硬碟時記錄）只在 debug 版開；量流暢度用的 perfTest 不開，避免影響數據
+            buildConfigField("boolean", "STRICT_MODE", "false")
             optimization {
                 enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
@@ -67,6 +69,7 @@ android {
         getByName("debug") {
             if (hasReleaseKey) signingConfig = signingConfigs.getByName("release")
             buildConfigField("boolean", "APP_CHECK_DEBUG", "true")
+            buildConfigField("boolean", "STRICT_MODE", "true")
         }
     }
     compileOptions {
@@ -78,6 +81,17 @@ android {
         viewBinding = true
         compose = true
         buildConfig = true
+    }
+}
+
+composeCompiler {
+    // java.time 等不可變類別當成穩定型別（見 compose-stability.conf），日期參數沒變時元件可以跳過重組
+    stabilityConfigurationFiles.add(project.layout.projectDirectory.file("compose-stability.conf"))
+    // 想看哪些參數不穩定、哪些元件不能跳過時：./gradlew :app:compileDebugKotlin -PcomposeReports=true
+    // 報告在 app/build/compose_reports/
+    if (project.findProperty("composeReports") == "true") {
+        reportsDestination = layout.buildDirectory.dir("compose_reports")
+        metricsDestination = layout.buildDirectory.dir("compose_reports")
     }
 }
 

@@ -70,6 +70,11 @@ private val LEAD_ICONS: List<Pair<String, () -> ImageVector>> = listOf(
     "🔗" to { Tabler.Link },
     "🔒" to { Tabler.Lock },
     "😴" to { Tabler.Zzz },
+    "ℹ️" to { Tabler.InfoCircle },
+    "🔑" to { Tabler.Key },
+    "📷" to { Tabler.Camera },
+    "🎉" to { Tabler.Confetti },
+    "⚑" to { Tabler.Flag },
     "✓" to { Tabler.Check },
     "+" to { Tabler.Plus }
 )

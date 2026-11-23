@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,7 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -61,14 +62,17 @@ private data class TimeBlock(
 
 private fun minutesOf(t: java.time.LocalTime) = t.hour * 60 + t.minute
 
-private fun blocksFor(date: LocalDate, events: List<ShiftEvent>): List<TimeBlock> {
+/** 日期 → 那天的排班（保留原本順序）；資料變了才重建 */
+private fun eventsByDateOf(events: List<ShiftEvent>): Map<LocalDate, List<ShiftEvent>> = events.groupBy { it.date }
+
+private fun blocksFor(date: LocalDate, byDate: Map<LocalDate, List<ShiftEvent>>): List<TimeBlock> {
     val out = mutableListOf<TimeBlock>()
-    events.filter { it.date == date && it.type != ShiftType.OFF }.forEach { ev ->
+    byDate[date].orEmpty().filter { it.type != ShiftType.OFF }.forEach { ev ->
         val s = minutesOf(ev.startTime); val e = minutesOf(ev.endTime)
         out += if (e > s) TimeBlock(ev, s, e, continued = false, continues = false)
         else TimeBlock(ev, s, 24 * 60, continued = false, continues = e > 0)
     }
-    events.filter { it.date == date.minusDays(1) && it.type != ShiftType.OFF }.forEach { ev ->
+    byDate[date.minusDays(1)].orEmpty().filter { it.type != ShiftType.OFF }.forEach { ev ->
         val s = minutesOf(ev.startTime); val e = minutesOf(ev.endTime)
         if (e <= s && e > 0) out += TimeBlock(ev, 0, e, continued = true, continues = false)
     }
@@ -88,19 +92,6 @@ private fun alarmColor(stage: AlarmStage): Color = when (stage) {
     AlarmStage.WAKE -> ROSE
     AlarmStage.LEAVE -> AMBER
     AlarmStage.CUSTOM -> Color(0xFF38BDF8)
-}
-
-/** 每分鐘更新一次的「現在」 */
-@Composable
-private fun rememberNow(): LocalDateTime {
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(30_000L)
-            now = LocalDateTime.now()
-        }
-    }
-    return now
 }
 
 /**
@@ -123,10 +114,15 @@ fun TimeGridCalendar(
     onEditDate: (LocalDate) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val now = rememberNow()
-    val today = now.toLocalDate()
+    // 「現在」對齊整分鐘更新；整個視圖只在「日期」變了才重組，紅色現在線由 NowLine 自己讀
+    val nowState = rememberMinuteNowState()
+    val today by remember { derivedStateOf { nowState.value.toLocalDate() } }
     val firstDow = if (weekStartsOnMonday) DayOfWeek.MONDAY else DayOfWeek.SUNDAY
     fun weekStartOf(d: LocalDate): LocalDate = d.minusDays(((d.dayOfWeek.value - firstDow.value + 7) % 7).toLong())
+
+    // 查表：資料變了才重建（events／alarms 是 SnapshotStateList 時，derivedStateOf 會跟著內容更新）
+    val eventsByDate by remember(events) { derivedStateOf { eventsByDateOf(events) } }
+    val alarmsByDate by remember(alarms) { derivedStateOf { alarms.filter { it.enabled }.groupBy { it.date } } }
 
     // 每一頁＝一週或一天；以第一次打開時的日期為基準
     val anchor = remember(weekMode, weekStartsOnMonday) { if (weekMode) weekStartOf(selectedDate) else selectedDate }
@@ -151,11 +147,13 @@ fun TimeGridCalendar(
     val hourH: Dp = if (weekMode) 52.dp else 64.dp
     val gutter = 44.dp
     val density = LocalDensity.current
-    // 各頁共用同一個上下捲動位置（翻頁時停在同一個時段），一開始捲到現在或最早的班前一小時
-    var sharedScroll by remember(weekMode) {
+    // 各頁共用同一個上下捲動位置（翻頁時停在同一個時段），一開始捲到現在或最早的班前一小時。
+    // 這個值只在協程裡讀寫、不在組合階段讀：上下捲動時不會讓頁面每一幀重組
+    val sharedScroll = remember(weekMode) {
+        val now = nowState.value
         val days = if (weekMode) (0..6).map { pageStart(pageOf(selectedDate)).plusDays(it.toLong()) } else listOf(selectedDate)
-        val startHour = if (today in days) now.hour - 1
-        else days.flatMap { blocksFor(it, events) }.minOfOrNull { it.startMin / 60 }?.minus(1) ?: 6
+        val startHour = if (now.toLocalDate() in days) now.hour - 1
+        else days.flatMap { blocksFor(it, eventsByDate) }.minOfOrNull { it.startMin / 60 }?.minus(1) ?: 6
         mutableIntStateOf(with(density) { (hourH * startHour.coerceIn(0, 20)).roundToPx() })
     }
 
@@ -188,13 +186,27 @@ fun TimeGridCalendar(
         }
 
         HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
-            val start = pageStart(page)
-            val days = if (weekMode) (0..6).map { start.plusDays(it.toLong()) } else listOf(start)
-            val scroll = rememberScrollState(initial = sharedScroll)
-            LaunchedEffect(scroll.value, pager.currentPage) { if (page == pager.currentPage) sharedScroll = scroll.value }
+            val days = remember(page, anchor) {
+                val start = pageStart(page)
+                if (weekMode) (0..6).map { start.plusDays(it.toLong()) } else listOf(start)
+            }
+            val scroll = rememberScrollState(initial = Snapshot.withoutReadObservation { sharedScroll.intValue })
+            LaunchedEffect(page) {
+                snapshotFlow { pager.currentPage == page }.collectLatest { isCurrent ->
+                    if (isCurrent) {
+                        // 目前這一頁：把上下捲動位置記下來，給左右兩頁接著用
+                        snapshotFlow { scroll.value }.collect { sharedScroll.intValue = it }
+                    } else {
+                        // 旁邊的頁：開始左右滑的那一刻，捲到和目前那一頁同一個時段（只做一次，不是每一幀）
+                        snapshotFlow { pager.isScrollInProgress }.collect { scrolling ->
+                            if (scrolling && scroll.value != sharedScroll.intValue) scroll.scrollTo(sharedScroll.intValue)
+                        }
+                    }
+                }
+            }
             Column(Modifier.fillMaxSize()) {
-                DayHeaders(days, weekMode, today, selectedDate, events, holidayPolicy, gutter, theme, onOpenDay)
-                AllDayRow(days, events, holidayPolicy, gutter, theme, onEditDate)
+                DayHeaders(days, weekMode, today, selectedDate, eventsByDate, holidayPolicy, gutter, theme, onOpenDay)
+                AllDayRow(days, eventsByDate, holidayPolicy, gutter, theme, onEditDate)
                 HorizontalDivider(color = theme.borderColor)
                 Box(Modifier.fillMaxSize().verticalScroll(scroll)) {
                     Row(Modifier.fillMaxWidth().height(hourH * 24)) {
@@ -204,9 +216,9 @@ fun TimeGridCalendar(
                             Row(Modifier.fillMaxSize()) {
                                 days.forEach { d ->
                                     DayColumn(
-                                        date = d, compact = weekMode, events = events,
-                                        alarms = alarms.filter { it.enabled && it.date == d },
-                                        now = now, hourH = hourH, theme = theme,
+                                        date = d, compact = weekMode, eventsByDate = eventsByDate,
+                                        alarms = alarmsByDate[d].orEmpty(),
+                                        now = nowState, hourH = hourH, theme = theme,
                                         modifier = Modifier.weight(1f).fillMaxHeight(),
                                         onEditDate = onEditDate
                                     )
@@ -230,7 +242,7 @@ private fun dayLabel(d: LocalDate): String =
 
 @Composable
 private fun DayHeaders(
-    days: List<LocalDate>, weekMode: Boolean, today: LocalDate, selected: LocalDate, events: List<ShiftEvent>,
+    days: List<LocalDate>, weekMode: Boolean, today: LocalDate, selected: LocalDate, eventsByDate: Map<LocalDate, List<ShiftEvent>>,
     holidayPolicy: HolidayPolicy, gutter: Dp, theme: ThemePalette, onOpenDay: (LocalDate) -> Unit
 ) {
     Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -263,7 +275,7 @@ private fun DayHeaders(
                     )
                 }
                 if (!weekMode) {
-                    val status = DayResolver.resolve(d, events, holidayPolicy)
+                    val status = DayResolver.resolveDay(d, eventsByDate[d]?.firstOrNull(), holidayPolicy)
                     val ev = status.event
                     val line = when {
                         ev != null && ev.type == ShiftType.OFF -> tr("{0} · 全天休假", tr(ev.title))
@@ -282,8 +294,8 @@ private fun DayHeaders(
 }
 
 @Composable
-private fun AllDayRow(days: List<LocalDate>, events: List<ShiftEvent>, holidayPolicy: HolidayPolicy, gutter: Dp, theme: ThemePalette, onEditDate: (LocalDate) -> Unit) {
-    val offs = days.map { d -> events.firstOrNull { it.date == d && it.type == ShiftType.OFF } }
+private fun AllDayRow(days: List<LocalDate>, eventsByDate: Map<LocalDate, List<ShiftEvent>>, holidayPolicy: HolidayPolicy, gutter: Dp, theme: ThemePalette, onEditDate: (LocalDate) -> Unit) {
+    val offs = days.map { d -> eventsByDate[d]?.firstOrNull { it.type == ShiftType.OFF } }
     // 沒有排休假的國定假日：全天列顯示假日名稱（紅色，只是標示）
     val holidays = days.mapIndexed { i, d -> if (offs[i] == null) holidayPolicy.holidayOn(d) else null }
     if (offs.all { it == null } && holidays.all { it == null }) return
@@ -332,10 +344,11 @@ private fun GridLines(columns: Int, hourH: Dp, theme: ThemePalette) {
 
 @Composable
 private fun DayColumn(
-    date: LocalDate, compact: Boolean, events: List<ShiftEvent>, alarms: List<ShiftAlarm>,
-    now: LocalDateTime, hourH: Dp, theme: ThemePalette, modifier: Modifier, onEditDate: (LocalDate) -> Unit
+    date: LocalDate, compact: Boolean, eventsByDate: Map<LocalDate, List<ShiftEvent>>, alarms: List<ShiftAlarm>,
+    now: State<LocalDateTime>, hourH: Dp, theme: ThemePalette, modifier: Modifier, onEditDate: (LocalDate) -> Unit
 ) {
-    val blocks = remember(date, events) { blocksFor(date, events) }
+    // 查表換新（資料改了）才重算；以前用整份清單當 key，清單內容改了色塊也不會更新
+    val blocks = remember(date, eventsByDate) { blocksFor(date, eventsByDate) }
     val minH = hourH / 60
     BoxWithConstraints(modifier.clickable { onEditDate(date) }) {
         val colW = maxWidth
@@ -385,11 +398,16 @@ private fun DayColumn(
                 }
             }
         }
-        // ---- 現在時間 ----
-        if (date == now.toLocalDate()) {
-            val y = minH * (now.hour * 60 + now.minute)
-            Box(Modifier.offset(y = y - 1.dp).fillMaxWidth().height(2.dp).background(ROSE))
-            Box(Modifier.offset(x = (-4).dp, y = y - 5.dp).size(10.dp).clip(CircleShape).background(ROSE))
-        }
+        // ---- 現在時間（每分鐘動一次，只有這條線重組） ----
+        NowLine(date, now, minH)
     }
+}
+
+@Composable
+private fun NowLine(date: LocalDate, now: State<LocalDateTime>, minH: Dp) {
+    val n = now.value
+    if (date != n.toLocalDate()) return
+    val y = minH * (n.hour * 60 + n.minute)
+    Box(Modifier.offset(y = y - 1.dp).fillMaxWidth().height(2.dp).background(ROSE))
+    Box(Modifier.offset(x = (-4).dp, y = y - 5.dp).size(10.dp).clip(CircleShape).background(ROSE))
 }

@@ -1,0 +1,5 @@
+# Baseline Profile：安裝後由 profileinstaller 交給系統，系統背景最佳化時先把這些程式編譯成機器碼。
+# 用 GitHub 發的 APK 拿不到 Play 商店的雲端設定檔，沒有這份的話，每個畫面第一次滑都在邊跑邊編譯。
+# Compose 等函式庫自己有附設定檔，這裡補上 App 自己的程式（App 不大，整個套件都放進來）。
+HSPLcom/reverie/alarm/**;->**(**)**
+Lcom/reverie/alarm/**;
