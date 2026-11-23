@@ -17,6 +17,21 @@
 
 ---
 
+### 畫面預覽
+
+<table>
+  <tr>
+    <td align="center"><img src="./.github/screenshots/calendar.jpg" width="180" alt="排班日曆" /><br /><sub>排班日曆</sub></td>
+    <td align="center"><img src="./.github/screenshots/alarms.jpg" width="180" alt="兩段式鬧鐘" /><br /><sub>兩段式鬧鐘</sub></td>
+    <td align="center"><img src="./.github/screenshots/ai-schedule.jpg" width="180" alt="AI 快速排班" /><br /><sub>AI 快速排班</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="./.github/screenshots/weather.jpg" width="180" alt="工具：天氣與通勤" /><br /><sub>工具：天氣與通勤</sub></td>
+    <td align="center"><img src="./.github/screenshots/sharing.jpg" width="180" alt="共享帳號" /><br /><sub>共享帳號</sub></td>
+    <td></td>
+  </tr>
+</table>
+
 ### 核心功能
 
 * **智慧排班日曆**：內建早班、晚班、夜班與休假模板，一鍵快速套用並掌握整月班表；月、週、日、年四種檢視，週／日視圖是 24 小時時間軸。
