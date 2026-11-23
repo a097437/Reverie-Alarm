@@ -31,7 +31,7 @@
     <td align="center"><img src="./.github/screenshots/ai-schedule.jpg" width="180" alt="AI 快速排班" /><br /><sub>AI 快速排班</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="./.github/screenshots/weather.jpg" width="180" alt="工具：天氣與通勤" /><br /><sub>工具：天氣與通勤</sub></td>
+    <td align="center"><img src="./.github/screenshots/weather.jpg" width="180" alt="工具：天氣等工具" /><br /><sub>工具：天氣與通勤</sub></td>
     <td align="center"><img src="./.github/screenshots/sharing.jpg" width="180" alt="共享帳號" /><br /><sub>共享帳號</sub></td>
     <td align="center"><img src="./.github/screenshots/drawer.jpg" width="180" alt="側邊選單" /><br /><sub>側邊選單</sub></td>
   </tr>
