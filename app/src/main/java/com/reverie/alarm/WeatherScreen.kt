@@ -9,6 +9,7 @@ import android.location.LocationManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -236,7 +237,7 @@ fun WeatherScreen(theme: ThemePalette, events: List<ShiftEvent>, alarms: List<Sh
 
         // ---- 特報 ----
         if (data.alerts.isNotEmpty()) {
-            items(data.alerts) { a -> AlertCard(theme, a) }
+            items(data.alerts) { a -> AlertCard(theme, a, data.place.county) }
         }
 
         // ---- 目前天氣 ----
@@ -355,33 +356,224 @@ private fun PlacePicker(theme: ThemePalette, current: WeatherPlace?, locating: B
     }
 }
 
+private val ALERT_ORANGE = Color(0xFFFF8000)
+private val ALERT_TIME = java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm")
+private val ZH_NUM = listOf("一", "二", "三", "四", "五")
+
+/** 特報卡：和氣象署特報網頁相同的完整內容（發布時間、概述、特報區域、注意事項、網址） */
 @Composable
-private fun AlertCard(theme: ThemePalette, a: WxAlert) {
-    var open by remember { mutableStateOf(false) }
+private fun AlertCard(theme: ThemePalette, a: WxAlert, homeCounty: String?) {
+    val tint = alertTint(a.color)
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    val home = homeCounty?.replace('台', '臺')
+    // 預設收合（只看標題、發布時間和概述開頭），點一下展開全文
+    var open by remember(a.title, a.sent) { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(AMBER.copy(alpha = 0.13f))
-            .border(1.dp, AMBER.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+            .background(tint.copy(alpha = 0.13f))
+            .border(1.dp, tint.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
             .clickable { open = !open }
+            .animateContentSize(tween(320, easing = Motion.EnterEasing))
             .padding(14.dp)
     ) {
+        // 標題＋所在縣市的燈號
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Tabler.AlertTriangle, contentDescription = null, tint = AMBER.readable(3.0), modifier = Modifier.size(18.dp))
+            Icon(Tabler.AlertTriangle, contentDescription = null, tint = tint.readable(3.0), modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                if (I18n.isEn) trAlert(a.title) else if (a.title.endsWith("特報") || a.title.contains("停班")) a.title else "${a.title}特報",
-                fontSize = 14.sp, fontWeight = FontWeight.Black, color = AMBER.readable(), modifier = Modifier.weight(1f)
+                if (I18n.isEn) trAlert(a.name) else a.name,
+                fontSize = 15.sp, fontWeight = FontWeight.Black, color = tint.readable(), modifier = Modifier.weight(1f)
             )
-            a.expires?.let { Text(tr("至 {0}/{1} {2}", it.monthValue, it.dayOfMonth, it.format(HM)), fontSize = 11.sp, color = theme.textMuted) }
+            if (a.color.isNotBlank()) {
+                Text(
+                    tr("{0} {1}", tr(home ?: ""), tr("${a.color}燈號")),
+                    fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black.copy(alpha = 0.85f),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (a.color == "黃色") Color(0xFFFFE14D) else tint)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            a.summary, fontSize = 12.sp, color = theme.textMain, lineHeight = 18.sp,
-            maxLines = if (open) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis
+        Spacer(Modifier.height(8.dp))
+        a.sent?.let { Text(tr("發布時間：{0}", it.format(ALERT_TIME)), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SKY.readable()) }
+        a.expires?.let { Text(tr("有效至：{0}", it.format(ALERT_TIME)), fontSize = 12.sp, color = theme.textMuted) }
+
+        if (!open) {
+            Spacer(Modifier.height(6.dp))
+            Text(a.summary, fontSize = 13.sp, color = theme.textMain, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            AlertToggle(theme, open = false)
+            return@Column
+        }
+
+        // 內容分段，依序編號（大雨特報沒有注意事項，就只有兩段）
+        var n = 0
+        @Composable
+        fun Section(title: String, body: @Composable () -> Unit) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                if (I18n.isEn) tr(title) else "${ZH_NUM.getOrElse(n) { "${n + 1}" }}、$title",
+                fontSize = 13.sp, fontWeight = FontWeight.Black, color = theme.textMain
+            )
+            n++
+            Spacer(Modifier.height(2.dp))
+            body()
+        }
+        Section("概述") { Text(a.summary, fontSize = 13.sp, color = theme.textMain, lineHeight = 20.sp) }
+        if (a.areas.isNotEmpty()) Section("特報區域") {
+            a.areas.forEach { ar ->
+                Text("【${tr(ar.level)}】", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = theme.textMain, lineHeight = 20.sp)
+                Text(
+                    androidx.compose.ui.text.buildAnnotatedString {
+                        ar.counties.forEachIndexed { i, c ->
+                            if (i > 0) append(if (I18n.isEn) ", " else "、")
+                            if (c == home) {
+                                pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Black, color = tint.readable()))
+                                append(tr(c)); pop()
+                            } else append(tr(c))
+                        }
+                        if (!I18n.isEn) append("。")
+                    },
+                    fontSize = 13.sp, color = theme.textMain, lineHeight = 20.sp
+                )
+            }
+        }
+        if (a.instructions.isNotEmpty()) Section("注意（警戒）事項") {
+            a.instructions.forEach { Text(it, fontSize = 13.sp, color = theme.textMain, lineHeight = 20.sp) }
+        }
+
+        // 網址：點一下用瀏覽器開
+        val links = listOfNotNull(
+            a.web.takeIf { it.isNotBlank() }?.let { tr("氣象署特報網頁") to it },
+            a.cap.takeIf { it.isNotBlank() }?.let { tr("原始資料（NCDR）") to it }
         )
-        Text(tr("{0}・{1}", if (I18n.isEn) "Source: ${a.source}" else a.source, if (open) tr("收起") else tr("點一下看全文")), fontSize = 10.sp, color = theme.textMuted, modifier = Modifier.padding(top = 4.dp))
+        if (links.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(color = tint.copy(alpha = 0.3f))
+            Spacer(Modifier.height(8.dp))
+            links.forEach { (label, url) ->
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { runCatching { uri.openUri(url) } }
+                        .padding(vertical = 4.dp)
+                ) {
+                    Text(label, fontSize = 11.sp, color = theme.textMuted)
+                    Text(
+                        url, fontSize = 12.sp, color = SKY.readable(), lineHeight = 17.sp,
+                        textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                    )
+                }
+            }
+        }
+        Text(
+            if (I18n.isEn) "Source: ${a.source}" else tr("資料來源：{0}", a.source),
+            fontSize = 10.sp, color = theme.textMuted, modifier = Modifier.padding(top = 4.dp)
+        )
+        AlertToggle(theme, open = true)
+    }
+}
+
+private fun alertTint(color: String) = when (color) {
+    "紅色" -> ROSE
+    "橙色" -> ALERT_ORANGE
+    else -> AMBER
+}
+
+/**
+ * 排班日曆上方的特報提示：收合時一行（縣市＋特報名稱），點一下展開每則的燈號、發布時間和概述；
+ * 「看完整內容」到天氣頁（有特報區域、注意事項和網址）
+ */
+@Composable
+fun WeatherAlertBanner(alerts: List<WxAlert>, county: String, fontScale: Float, onOpenWeather: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val rank = mapOf("紅色" to 3, "橙色" to 2, "黃色" to 1)
+    val tint = alertTint(alerts.maxByOrNull { rank[it.color] ?: 0 }?.color.orEmpty())
+    val fg = tint.readable()
+    val sep = if (I18n.isEn) ", " else "、"
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(tint.copy(alpha = 0.2f))
+            .border(1.dp, tint.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+            .clickable { open = !open }
+            .animateContentSize(tween(320, easing = Motion.EnterEasing))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Tabler.AlertTriangle, contentDescription = null, tint = fg, modifier = Modifier.size((16 * fontScale).dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "${tr(county)}${if (I18n.isEn) ": " else "："}" + alerts.joinToString(sep) { if (I18n.isEn) trAlert(it.name) else it.name },
+                fontSize = (12 * fontScale).sp, fontWeight = FontWeight.Bold, color = fg,
+                maxLines = if (open) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                if (open) Tabler.ChevronUp else Tabler.ChevronDown, contentDescription = if (open) tr("收起") else tr("展開"),
+                tint = fg, modifier = Modifier.size(16.dp)
+            )
+        }
+        if (open) {
+            alerts.forEach { a ->
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(color = tint.copy(alpha = 0.3f))
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (I18n.isEn) trAlert(a.name) else a.name,
+                        fontSize = (13 * fontScale).sp, fontWeight = FontWeight.Black, color = alertTint(a.color).readable(),
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (a.color.isNotBlank()) {
+                        Text(
+                            tr("${a.color}燈號"), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black.copy(alpha = 0.85f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (a.color == "黃色") Color(0xFFFFE14D) else alertTint(a.color))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                a.sent?.let { Text(tr("發布時間：{0}", it.format(ALERT_TIME)), fontSize = (11 * fontScale).sp, color = SKY.readable()) }
+                Spacer(Modifier.height(2.dp))
+                Text(a.summary, fontSize = (12 * fontScale).sp, color = fg, lineHeight = (18 * fontScale).sp)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onOpenWeather() }
+                    .padding(vertical = 4.dp)
+            ) {
+                Text(tr("看完整內容（區域、注意事項、網址）"), fontSize = (12 * fontScale).sp, fontWeight = FontWeight.Bold, color = fg)
+                Icon(Tabler.ChevronRight, contentDescription = null, tint = fg, modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
+/** 特報卡底部的「展開全文 ▼／收起 ▲」 */
+@Composable
+private fun AlertToggle(theme: ThemePalette, open: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+    ) {
+        Text(if (open) tr("收起") else tr("展開全文"), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = theme.textMuted)
+        Spacer(Modifier.width(4.dp))
+        Icon(
+            if (open) Tabler.ChevronUp else Tabler.ChevronDown, contentDescription = null,
+            tint = theme.textMuted, modifier = Modifier.size(14.dp)
+        )
     }
 }
 

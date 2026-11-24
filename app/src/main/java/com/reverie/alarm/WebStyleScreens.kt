@@ -12,6 +12,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -249,6 +251,206 @@ fun WebTextField(value: String, placeholder: String, theme: ThemePalette, modifi
 private fun formatHm(t: LocalTime) = "${t.hour.toString().padStart(2, '0')}:${t.minute.toString().padStart(2, '0')}"
 
 // ---------------------------------------------------------------------------
+// 頂部的年月切換：‹ 2026年 11月 ▾ [今] ›
+//  - 在這一區左右滑：往左滑下一期、往右滑上一期（標題會跟著手指移動）
+//  - 點年月：彈出年月選擇；點「今」：回到今天
+// ---------------------------------------------------------------------------
+@Composable
+private fun MonthSwitcher(
+    yearMonth: YearMonth,
+    theme: ThemePalette,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onToday: () -> Unit,
+    onOpenPicker: () -> Unit
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val threshold = with(density) { 36.dp.toPx() }
+    var drag by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+    val prev by androidx.compose.runtime.rememberUpdatedState(onPrev)
+    val next by androidx.compose.runtime.rememberUpdatedState(onNext)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .draggable(
+                orientation = androidx.compose.foundation.gestures.Orientation.Horizontal,
+                state = androidx.compose.foundation.gestures.rememberDraggableState { d -> drag += d },
+                onDragStopped = { velocity ->
+                    when {
+                        drag < -threshold || velocity < -900f -> next()
+                        drag > threshold || velocity > 900f -> prev()
+                    }
+                    androidx.compose.animation.core.animate(drag, 0f, animationSpec = androidx.compose.animation.core.spring(stiffness = 500f)) { v, _ -> drag = v }
+                }
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Tabler.ChevronLeft, contentDescription = tr("上一期"), tint = theme.textMain.copy(alpha = 0.75f),
+            modifier = Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).clickable { onPrev() }.padding(4.dp)
+        )
+        Row(
+            modifier = Modifier
+                .graphicsLayer {
+                    // 繪製階段才讀 drag：拖曳時不重組
+                    translationX = drag * 0.45f
+                    alpha = 1f - (kotlin.math.abs(drag) / (threshold * 5f)).coerceAtMost(0.45f)
+                }
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onOpenPicker() }
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            androidx.compose.animation.AnimatedContent(
+                targetState = yearMonth,
+                transitionSpec = {
+                    val forward = targetState > initialState
+                    val enter = androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(260, easing = Motion.EnterEasing)) { w -> if (forward) w / 2 else -w / 2 } +
+                        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220))
+                    val exit = androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(200)) { w -> if (forward) -w / 2 else w / 2 } +
+                        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160))
+                    (enter togetherWith exit).using(androidx.compose.animation.SizeTransform(clip = false))
+                },
+                label = "yearMonth"
+            ) { ym ->
+                Text(tr("{0}年 {1}月", ym.year, ym.monthValue), fontSize = 18.sp, fontWeight = FontWeight.Black, color = theme.textMain, maxLines = 1)
+            }
+            Icon(
+                Tabler.ChevronDown, contentDescription = tr("選擇年月"), tint = theme.textMuted,
+                modifier = Modifier.padding(start = 2.dp).size(14.dp)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(theme.accent.copy(alpha = 0.18f))
+                .border(1.dp, theme.accent.copy(alpha = 0.45f), RoundedCornerShape(50))
+                .clickable { onToday() }
+                .padding(horizontal = 7.dp, vertical = 1.dp)
+        ) { Text(tr("今"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = theme.accentText) }
+        Icon(
+            Tabler.ChevronRight, contentDescription = tr("下一期"), tint = theme.textMain.copy(alpha = 0.75f),
+            modifier = Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).clickable { onNext() }.padding(4.dp)
+        )
+    }
+}
+
+/** 年月選擇：上面切換年份（也可以在月份格子上左右滑），點一個月份就跳過去 */
+@Composable
+fun MonthPickerDialog(
+    current: YearMonth,
+    theme: ThemePalette,
+    onDismiss: () -> Unit,
+    onToday: () -> Unit,
+    onPick: (YearMonth) -> Unit
+) {
+    val thisMonth = remember { YearMonth.now() }
+    var year by remember { androidx.compose.runtime.mutableIntStateOf(current.year) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val threshold = with(density) { 48.dp.toPx() }
+    var drag by remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+
+    MotionAlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = theme.bgCard,
+        text = {
+            Column(Modifier.fillMaxWidth()) {
+                Text(tr("選擇年月"), fontSize = 20.sp, fontWeight = FontWeight.Black, color = theme.textMain)
+                Spacer(Modifier.height(14.dp))
+                // 年份
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Icon(
+                        Tabler.ChevronLeft, contentDescription = tr("上一年"), tint = theme.textMain,
+                        modifier = Modifier.size(40.dp).clip(CircleShape).background(theme.bgElevated).clickable { year-- }.padding(9.dp)
+                    )
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = year,
+                        transitionSpec = {
+                            val forward = targetState > initialState
+                            (androidx.compose.animation.slideInHorizontally(androidx.compose.animation.core.tween(240, easing = Motion.EnterEasing)) { w -> if (forward) w / 3 else -w / 3 } +
+                                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200))) togetherWith
+                                (androidx.compose.animation.slideOutHorizontally(androidx.compose.animation.core.tween(180)) { w -> if (forward) -w / 3 else w / 3 } +
+                                    androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(140)))
+                        },
+                        label = "year",
+                        modifier = Modifier.weight(1f)
+                    ) { y ->
+                        Text(
+                            tr("{0}年", y), fontSize = 22.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center,
+                            color = if (y == thisMonth.year) theme.accentText else theme.textMain, modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Icon(
+                        Tabler.ChevronRight, contentDescription = tr("下一年"), tint = theme.textMain,
+                        modifier = Modifier.size(40.dp).clip(CircleShape).background(theme.bgElevated).clickable { year++ }.padding(9.dp)
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                // 月份：3 欄 × 4 列
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .draggable(
+                            orientation = androidx.compose.foundation.gestures.Orientation.Horizontal,
+                            state = androidx.compose.foundation.gestures.rememberDraggableState { d -> drag += d },
+                            onDragStopped = { velocity ->
+                                if (drag < -threshold || velocity < -900f) year++
+                                else if (drag > threshold || velocity > 900f) year--
+                                drag = 0f
+                            }
+                        )
+                ) {
+                    (1..12).chunked(3).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { m ->
+                                val ym = YearMonth.of(year, m)
+                                val selected = ym == current
+                                val isNow = ym == thisMonth
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(50.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(if (selected) theme.accent.darkenForWhiteText() else theme.bgElevated)
+                                        .border(
+                                            if (isNow && !selected) 1.5.dp else 1.dp,
+                                            when {
+                                                selected -> Color.Transparent
+                                                isNow -> theme.accent
+                                                else -> theme.borderColor
+                                            },
+                                            RoundedCornerShape(16.dp)
+                                        )
+                                        .clickable { onPick(ym) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        if (I18n.isEn) I18n.monthName(m) else "${m}月",
+                                        fontSize = 16.sp, fontWeight = if (selected || isNow) FontWeight.Black else FontWeight.Bold,
+                                        color = when {
+                                            selected -> Color.White
+                                            isNow -> theme.accentText
+                                            else -> theme.textMain
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                WebButton(tr("回到今天"), theme, modifier = Modifier.weight(1f), filled = false, fontSize = 14.sp, radius = 50.dp, vertical = 13.dp, onClick = onToday)
+                WebButton(tr("取消"), theme, modifier = Modifier.weight(1f), filled = false, fontSize = 14.sp, radius = 50.dp, vertical = 13.dp, onClick = onDismiss)
+            }
+        }
+    )
+}
+
+// ---------------------------------------------------------------------------
 // 頂部列：☰  ‹ 2026年 11月 [今] ›          [⚡]  [⋮]
 // ---------------------------------------------------------------------------
 @Composable
@@ -265,11 +467,21 @@ fun WebTopBar(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
+    onPickMonth: (YearMonth) -> Unit,
     onToggleBatch: () -> Unit,
     onSearch: () -> Unit,
     onAddShift: () -> Unit,
     onAddAlarm: () -> Unit
 ) {
+    var showMonthPicker by remember { mutableStateOf(false) }
+    MotionHost(showMonthPicker) {
+        MonthPickerDialog(
+            current = yearMonth, theme = theme,
+            onDismiss = { showMonthPicker = false },
+            onToday = { showMonthPicker = false; onToday() },
+            onPick = { showMonthPicker = false; onPickMonth(it) }
+        )
+    }
     // 透明：背後是 App 底色（和背景星星），星星也會延伸到最上方
     Column(Modifier.fillMaxWidth()) {
         Row(
@@ -294,28 +506,7 @@ fun WebTopBar(
                 }
             }
             Spacer(Modifier.width(6.dp))
-            Icon(
-                Tabler.ChevronLeft, contentDescription = tr("上一期"), tint = theme.textMain.copy(alpha = 0.75f),
-                modifier = Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).clickable { onPrev() }.padding(4.dp)
-            )
-            Row(
-                modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { onToday() }.padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(tr("{0}年 {1}月", yearMonth.year, yearMonth.monthValue), fontSize = 18.sp, fontWeight = FontWeight.Black, color = theme.textMain, maxLines = 1)
-                Spacer(Modifier.width(6.dp))
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(theme.accent.copy(alpha = 0.18f))
-                        .border(1.dp, theme.accent.copy(alpha = 0.45f), RoundedCornerShape(50))
-                        .padding(horizontal = 7.dp, vertical = 1.dp)
-                ) { Text(tr("今"), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = theme.accentText) }
-            }
-            Icon(
-                Tabler.ChevronRight, contentDescription = tr("下一期"), tint = theme.textMain.copy(alpha = 0.75f),
-                modifier = Modifier.size(30.dp).clip(RoundedCornerShape(10.dp)).clickable { onNext() }.padding(4.dp)
-            )
+            MonthSwitcher(yearMonth, theme, onPrev, onNext, onToday) { showMonthPicker = true }
             Spacer(Modifier.weight(1f))
             if (showBatchButton) {
                 Box(

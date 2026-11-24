@@ -67,7 +67,35 @@ data class DayWx(
     val date: LocalDate, val code: Int, val tMax: Double, val tMin: Double, val pop: Int,
     val sunrise: LocalTime?, val sunset: LocalTime?, val uv: Double
 )
-data class WxAlert(val title: String, val summary: String, val source: String, val expires: LocalDateTime?)
+/** 特報區域的一個等級，例如「黃色燈號」：新北市、桃園市… */
+data class WxAlertArea(val level: String, val counties: List<String>)
+
+/**
+ * 一則特報（內容來自氣象署發的 CAP 檔，和氣象署網頁上的特報內容相同）
+ *  - title：種類（強風、低溫、降雨…）；headline：完整名稱（陸上強風特報）
+ *  - summary：概述；areas：特報區域；instructions：注意（警戒）事項
+ *  - color：所在縣市的燈號（黃色／橙色／紅色，沒有燈號的特報是空字串）
+ *  - web：氣象署的特報網頁；cap：NCDR 的原始資料
+ */
+data class WxAlert(
+    val title: String,
+    val summary: String,
+    val source: String,
+    val expires: LocalDateTime?,
+    val headline: String = "",
+    val sent: LocalDateTime? = null,
+    val web: String = "",
+    val cap: String = "",
+    val color: String = "",
+    val areas: List<WxAlertArea> = emptyList(),
+    val instructions: List<String> = emptyList()
+) {
+    /** 顯示用的名稱：「陸上強風特報」；沒有完整名稱時用「強風特報」 */
+    val name: String
+        get() = headline.replace(Regex("""\(.*?燈號\)"""), "").ifBlank {
+            if (title.endsWith("特報") || title.endsWith("警報") || title.contains("停班")) title else "${title}特報"
+        }
+}
 data class WeatherData(
     val place: WeatherPlace,
     val fetchedAt: Long,
@@ -241,23 +269,48 @@ object WeatherRepo {
         }
     }
 
-    /** NCDR 示警：只留中央氣象署的天氣特報（不含地震）與人事行政總處的停班停課，且要提到所在縣市 */
+    private class FeedEntry(
+        val title: String, val summary: String, val source: String, val expires: String,
+        val link: String, val updated: String, val msgType: String
+    )
+
+    /**
+     * NCDR 示警：只留中央氣象署的天氣特報（不含地震）與人事行政總處的停班停課，且要包含所在縣市。
+     * 每一則再去抓氣象署的 CAP 檔，取得發布時間、各燈號的區域、注意事項和氣象署的特報網頁網址。
+     * 天氣頁和排班日曆都會顯示（包含黃色燈號），卡片上標出所在縣市的燈號
+     */
     private fun fetchAlerts(county: String): List<WxAlert> {
-        val xml = httpGet("https://alerts.ncdr.nat.gov.tw/RssAtomFeed.ashx")
+        val now = LocalDateTime.now()
+        val entries = parseFeed(httpGet("https://alerts.ncdr.nat.gov.tw/RssAtomFeed.ashx"))
+            .filter { (it.source.contains("氣象") || it.source.contains("人事行政")) && !it.title.contains("地震") }
+            .sortedByDescending { it.updated }
+        // 氣象署：同一種特報只看最新一則（新發的會取代舊的；最新一則是「解除」就代表已經沒有了）
+        val cwa = entries.filter { it.source.contains("氣象") }.distinctBy { it.title }
+        // 停班停課：每個縣市各發一則，先挑有提到所在縣市的
+        val dgpa = entries.filter { it.source.contains("人事行政") && mentionsCounty(it.summary + it.title, county) }.distinctBy { it.title }
+        return (cwa + dgpa)
+            .filter { it.msgType != "Cancel" && !it.summary.contains("解除") && !it.title.contains("解除") }
+            .filter { e -> parseCapTime(e.expires)?.isAfter(now) ?: true }
+            .mapNotNull { buildAlert(it, county) }
+            .filter { it.expires == null || it.expires.isAfter(now) }
+    }
+
+    private fun parseFeed(xml: String): List<FeedEntry> {
         val parser = Xml.newPullParser()
         parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
         parser.setInput(xml.reader())
-        val out = mutableListOf<WxAlert>()
+        val out = mutableListOf<FeedEntry>()
         var inEntry = false
         var inAuthor = false
-        var title = ""; var summary = ""; var source = ""; var expires = ""
+        var title = ""; var summary = ""; var source = ""; var expires = ""; var link = ""; var updated = ""; var msgType = ""
         var tag = ""
         while (parser.eventType != XmlPullParser.END_DOCUMENT) {
             when (parser.eventType) {
                 XmlPullParser.START_TAG -> {
                     tag = parser.name
-                    if (tag == "entry") { inEntry = true; title = ""; summary = ""; source = ""; expires = "" }
+                    if (tag == "entry") { inEntry = true; title = ""; summary = ""; source = ""; expires = ""; link = ""; updated = ""; msgType = "" }
                     if (tag == "author") inAuthor = true
+                    if (inEntry && tag == "link") link = parser.getAttributeValue(null, "href").orEmpty()
                 }
                 XmlPullParser.TEXT -> if (inEntry) {
                     val t = parser.text ?: ""
@@ -265,26 +318,130 @@ object WeatherRepo {
                         tag == "title" && !inAuthor -> title += t
                         tag == "summary" -> summary += t
                         tag == "name" && inAuthor -> source += t
+                        tag == "updated" -> updated += t
                         tag == "cap:expires" -> expires += t
+                        tag == "cap:msgType" -> msgType += t
                     }
                 }
                 XmlPullParser.END_TAG -> {
                     if (parser.name == "author") inAuthor = false
                     if (parser.name == "entry") {
                         inEntry = false
-                        val relevantSource = source.contains("氣象") || source.contains("人事行政")
-                        if (relevantSource && !title.contains("地震") && mentionsCounty(summary + title, county)) {
-                            out += WxAlert(title.trim(), summary.trim(), source.trim(), parseCapTime(expires))
-                        }
+                        out += FeedEntry(title.trim(), summary.trim(), source.trim(), expires.trim(), link.trim(), updated.trim(), msgType.trim())
                     }
                     tag = ""
                 }
             }
             parser.next()
         }
-        val now = LocalDateTime.now()
-        // 同一種特報只留最新一則，且還沒過期
-        return out.filter { it.expires == null || it.expires.isAfter(now) }.distinctBy { it.title }
+        return out
+    }
+
+    // ---- CAP 檔（氣象署發布特報的標準格式；一則特報裡每個燈號各有一段 info） ----
+
+    private class CapInfo {
+        var headline = ""; var description = ""; var instruction = ""; var web = ""; var expires = ""
+        var color = ""; var level = ""
+        val areas = mutableListOf<String>()
+    }
+
+    private class Cap(val sent: String, val msgType: String, val infos: List<CapInfo>)
+
+    private fun parseCap(xml: String): Cap {
+        val p = Xml.newPullParser()
+        p.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+        p.setInput(xml.reader())
+        var sent = ""; var msgType = ""
+        val infos = mutableListOf<CapInfo>()
+        var cur: CapInfo? = null
+        var valueName = ""
+        val text = StringBuilder()
+        val path = ArrayDeque<String>()
+        while (p.eventType != XmlPullParser.END_DOCUMENT) {
+            when (p.eventType) {
+                XmlPullParser.START_TAG -> {
+                    path.addLast(p.name)
+                    text.setLength(0)
+                    if (p.name == "info") cur = CapInfo().also { infos += it }
+                }
+                XmlPullParser.TEXT -> text.append(p.text ?: "")
+                XmlPullParser.END_TAG -> {
+                    val name = p.name
+                    val parent = path.getOrNull(path.size - 2)
+                    val t = text.toString().trim()
+                    val i = cur
+                    when {
+                        name == "info" -> cur = null
+                        i == null && parent == "alert" && name == "sent" -> sent = t
+                        i == null && parent == "alert" && name == "msgType" -> msgType = t
+                        i != null && parent == "info" && name == "headline" -> i.headline = t
+                        i != null && parent == "info" && name == "description" -> i.description = t
+                        i != null && parent == "info" && name == "instruction" -> i.instruction = t
+                        i != null && parent == "info" && name == "web" -> i.web = t
+                        i != null && parent == "info" && name == "expires" -> i.expires = t
+                        i != null && parent == "area" && name == "areaDesc" -> if (t.isNotEmpty()) i.areas += t
+                        i != null && parent == "parameter" && name == "valueName" -> valueName = t
+                        i != null && parent == "parameter" && name == "value" -> when (valueName) {
+                            "alert_color" -> i.color = t
+                            "severity_level" -> i.level = t
+                        }
+                    }
+                    path.removeLastOrNull()
+                    text.setLength(0)
+                }
+            }
+            p.next()
+        }
+        return Cap(sent, msgType, infos)
+    }
+
+    private val COLOR_RANK = mapOf("紅色" to 3, "橙色" to 2, "黃色" to 1)
+
+    /** 「新北市貢寮區」→「新北市」（不是縣市開頭的，例如海域，就保留原文） */
+    private fun countyOf(area: String): String {
+        val a = area.replace('台', '臺')
+        return if (a.length >= 3 && (a[2] == '市' || a[2] == '縣')) a.substring(0, 3) else a
+    }
+
+    private fun buildAlert(e: FeedEntry, county: String): WxAlert? {
+        val cap = e.link.takeIf { it.startsWith("https://") }?.let { url -> runCatching { parseCap(httpGet(url)) }.getOrNull() }
+        if (cap?.msgType == "Cancel") return null
+        val home = county.replace('台', '臺')
+        val infos = cap?.infos.orEmpty()
+            .filter { it.description.isNotBlank() || it.areas.isNotEmpty() }
+            .sortedByDescending { COLOR_RANK[it.color] ?: 0 }
+        val mine = infos.filter { info -> info.areas.any { countyOf(it) == home } }
+        // CAP 有列出區域就用區域判斷（比對文字會漏掉「大臺北山區」這種寫法）；沒有才看文字
+        val relevant = if (infos.any { it.areas.isNotEmpty() }) mine.isNotEmpty() else mentionsCounty(e.summary + e.title, county)
+        if (!relevant) return null
+        val top = mine.firstOrNull() ?: infos.firstOrNull()
+        val areas = infos.filter { it.areas.isNotEmpty() }.map { info ->
+            WxAlertArea(
+                level = if (info.color.isNotBlank()) "${info.color}燈號" else info.level.ifBlank { info.headline },
+                counties = info.areas.map(::countyOf).distinct()
+            )
+        }
+        return WxAlert(
+            title = e.title,
+            summary = top?.description?.ifBlank { null } ?: e.summary,
+            source = e.source,
+            expires = parseIsoTime(top?.expires) ?: parseCapTime(e.expires),
+            headline = top?.headline.orEmpty(),
+            sent = parseIsoTime(cap?.sent) ?: parseIsoTime(e.updated),
+            web = top?.web.orEmpty(),
+            cap = e.link,
+            color = mine.firstOrNull()?.color.orEmpty(),
+            areas = areas,
+            instructions = infos.map { it.instruction }.filter { it.isNotBlank() }.distinct()
+        )
+    }
+
+    /** 「2026-11-24T22:25:15+08:00」→ 臺灣時間 */
+    private fun parseIsoTime(s: String?): LocalDateTime? {
+        if (s.isNullOrBlank()) return null
+        return runCatching {
+            java.time.OffsetDateTime.parse(s.trim()).atZoneSameInstant(java.time.ZoneId.of("Asia/Taipei")).toLocalDateTime()
+        }.getOrNull()
     }
 
     private fun mentionsCounty(text: String, county: String): Boolean {
@@ -351,18 +508,38 @@ object WeatherRepo {
 
     private fun alertsJson(list: List<WxAlert>) = JSONArray().apply {
         list.forEach { a ->
-            put(JSONObject().put("t", a.title).put("s", a.summary).put("src", a.source).put("exp", a.expires?.toString() ?: ""))
+            put(
+                JSONObject().put("t", a.title).put("s", a.summary).put("src", a.source).put("exp", a.expires?.toString() ?: "")
+                    .put("h", a.headline).put("sent", a.sent?.toString() ?: "").put("web", a.web).put("cap", a.cap).put("c", a.color)
+                    .put("areas", JSONArray().apply {
+                        a.areas.forEach { ar -> put(JSONObject().put("l", ar.level).put("cs", JSONArray(ar.counties))) }
+                    })
+                    .put("ins", JSONArray(a.instructions))
+            )
         }
     }
 
     private fun alertsFrom(raw: String?): List<WxAlert> {
         if (raw.isNullOrBlank()) return emptyList()
+        fun JSONArray?.strings() = if (this == null) emptyList() else (0 until length()).map { getString(it) }
         return runCatching {
             val arr = JSONArray(raw)
             (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
-                WxAlert(o.getString("t"), o.getString("s"), o.getString("src"), o.getString("exp").takeIf { it.isNotBlank() }?.let(LocalDateTime::parse))
-            }.filter { it.expires == null || it.expires.isAfter(LocalDateTime.now()) }
+                val areas = o.optJSONArray("areas")
+                WxAlert(
+                    title = o.getString("t"), summary = o.getString("s"), source = o.getString("src"),
+                    expires = o.getString("exp").takeIf { it.isNotBlank() }?.let(LocalDateTime::parse),
+                    headline = o.optString("h"),
+                    sent = o.optString("sent").takeIf { it.isNotBlank() }?.let(LocalDateTime::parse),
+                    web = o.optString("web"), cap = o.optString("cap"), color = o.optString("c"),
+                    areas = if (areas == null) emptyList() else (0 until areas.length()).map { j ->
+                        val ar = areas.getJSONObject(j)
+                        WxAlertArea(ar.getString("l"), ar.optJSONArray("cs").strings())
+                    },
+                    instructions = o.optJSONArray("ins").strings()
+                )
+            }.filter { (it.expires == null || it.expires.isAfter(LocalDateTime.now())) && !it.summary.contains("解除") }
         }.getOrDefault(emptyList())
     }
 }

@@ -26,8 +26,8 @@ android {
         applicationId = "com.reverie.alarm"
         minSdk = 26
         targetSdk = 37
-        versionCode = 9
-        versionName = "2.6.5"
+        versionCode = 10
+        versionName = "2.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

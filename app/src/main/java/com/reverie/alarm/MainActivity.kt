@@ -1255,6 +1255,13 @@ fun ReverieAlarmApp() {
                             // 週／日視圖時留在原本的檢視，只跳回今天
                             if (viewMode != CalendarViewMode.WEEK && viewMode != CalendarViewMode.DAY) viewMode = CalendarViewMode.MONTH
                         },
+                        // 從年月選擇跳過去；週／日視圖時移到那個月的同一天（該月沒有那天就用最後一天）
+                        onPickMonth = { ym ->
+                            currentYearMonth = ym
+                            if (selectedTab == 0 && (viewMode == CalendarViewMode.WEEK || viewMode == CalendarViewMode.DAY)) {
+                                selectedDate = ym.atDay(selectedDate.dayOfMonth.coerceAtMost(ym.lengthOfMonth()))
+                            }
+                        },
                         onToggleBatch = {
                             batchMode = !batchMode
                             if (!batchMode) batchSelectedDates.clear()
@@ -2002,32 +2009,11 @@ fun CalendarScreen(
         contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // 所在地區有天氣特報（颱風、豪大雨、強風…）時提示，點一下看天氣
+        // 所在地區有天氣特報時顯示（收合時一行；點一下展開看每則的燈號、發布時間和概述，完整內容在天氣頁）
         val wxAlerts = WeatherRepo.data?.takeIf { it.place == WeatherRepo.place }?.alerts.orEmpty()
         if (wxAlerts.isNotEmpty()) {
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0x33F59E0B))
-                        .border(1.dp, Color(0x66F59E0B), RoundedCornerShape(16.dp))
-                        .clickable { onOpenWeather() }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconText(
-                        if (I18n.isEn) "⚠️ ${tr(WeatherRepo.place?.county ?: "")}: " + wxAlerts.joinToString(", ") { trAlert(it.title) }
-                        else "⚠️ ${WeatherRepo.place?.county ?: ""}${wxAlerts.joinToString("、") { it.title }}" + if (wxAlerts.size > 1) "等 ${wxAlerts.size} 則特報" else if (wxAlerts[0].title.contains("特報") || wxAlerts[0].title.contains("停班")) "" else "特報",
-                        color = Color(0xFFFCD34D).readable(),
-                        fontSize = (12 * fontScale).sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Icon(Tabler.ChevronRight, contentDescription = tr("看天氣"), tint = Color(0xFFFCD34D).readable(), modifier = Modifier.size(16.dp))
-                }
+            item(key = "wx-alerts") {
+                WeatherAlertBanner(wxAlerts, WeatherRepo.place?.county ?: "", fontScale, onOpenWeather)
             }
         }
 
