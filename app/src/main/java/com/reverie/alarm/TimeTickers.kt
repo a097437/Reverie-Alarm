@@ -9,6 +9,10 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameMillis
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 
@@ -56,3 +60,38 @@ fun rememberMinuteNowState(): State<LocalDateTime> {
 /** 對齊整分鐘更新的「現在」 */
 @Composable
 fun rememberMinuteNow(): LocalDateTime = rememberMinuteNowState().value
+
+/**
+ * 讓螢幕一直維持高更新率（120Hz）。
+ *
+ * 很多手機（例如小米 HyperOS）畫面約 1 秒沒有新內容，就把螢幕降到 60Hz 省電；
+ * 等下一個動畫開始才升回 120Hz，升頻的那一下會停住一格，過場動畫的開頭看起來就像頓了、撕裂。
+ *
+ * 這裡每 0.25 秒重畫一個看不見的 1 像素點，螢幕就一直有新畫面、不會降頻。
+ * 刻意不讓整個畫面每秒重畫 120 次：那樣手機會變熱，熱到一定程度系統會強制降到 60Hz，反而更卡。
+ * App 在背景時自動停止；省電模式時不做（交給系統省電）。
+ */
+@Composable
+fun KeepHighRefreshRate() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val tick = remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        val power = context.getSystemService(android.os.PowerManager::class.java)
+        while (true) {
+            delay(HEARTBEAT_MS)
+            if (power?.isPowerSaveMode == true) continue
+            // App 不在畫面上時 withFrameMillis 會自動暫停
+            withFrameMillis { tick.intValue++ }
+        }
+    }
+    androidx.compose.foundation.layout.Spacer(
+        androidx.compose.ui.Modifier
+            .size(1.dp)
+            .drawBehind {
+                tick.intValue // 在繪製階段讀：每次只重畫這 1 像素，不會重組
+                drawRect(Color.Transparent)
+            }
+    )
+}
+
+private const val HEARTBEAT_MS = 250L

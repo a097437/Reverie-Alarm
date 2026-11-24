@@ -1,7 +1,6 @@
 package com.reverie.alarm
 
 import android.os.PowerManager
-import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,9 +22,6 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlin.math.PI
 import kotlin.math.ceil
 import kotlin.math.sin
@@ -41,7 +37,6 @@ import kotlin.random.Random
 //   - 省電、不拖慢滑動（120Hz 每一幀只有 8.3ms）：
 //       * 一般星星分成幾組，每組畫在自己的圖層裡、只畫一次；閃爍時只改圖層的透明度，不用重錄繪圖指令
 //       * 只有少數四角閃光星每次重畫（要跟著縮放），漸層與形狀都事先建好，不會每幀產生新物件
-//       * 最後一次碰觸螢幕約 8 秒後就停住；停住時畫面完全不更新，系統可以降頻省電、手機不會一直發熱
 //       * 省電模式不閃；App 在背景時自動暫停
 // ============================================================================
 
@@ -119,23 +114,12 @@ private fun sparklePath(center: Offset, r: Float): Path {
 private const val TWINKLE_GROUPS = 5
 private val GROUP_SPEED = floatArrayOf(0.7f, 1.1f, 1.5f, 0.9f, 1.9f) // 弧度／秒
 private val GROUP_PHASE = floatArrayOf(0f, 1.3f, 2.6f, 3.9f, 5.2f)
-/** 最後一次碰觸螢幕之後，星星再閃多久就停住 */
-private const val TWINKLE_AFTER_TOUCH_MS = 8_000L
 /** 閃爍的更新間隔（約每秒 17 次；一次閃爍要好幾秒，這樣就夠順） */
 private const val TWINKLE_TICK_MS = 50L
 /** 關掉閃爍時固定的亮度 */
 private const val STILL_TWINKLE = 0.75f
 
 private fun twinkleOf(t: Float, speed: Float, phase: Float): Float = 0.5f + 0.5f * sin(t * speed + phase)
-
-/** 最近一次碰觸螢幕的時間：MainActivity 在手指按下／放開、回到前景時更新 */
-object UserActivity {
-    private val last = MutableStateFlow(SystemClock.uptimeMillis())
-    val lastTouch: StateFlow<Long> get() = last
-    fun touched() {
-        last.value = SystemClock.uptimeMillis()
-    }
-}
 
 @Composable
 fun StarfieldBackground(
@@ -153,27 +137,26 @@ fun StarfieldBackground(
     }
     val sparkles = remember(stars) { stars.filter { it.kind == 2 } }
 
-    // 累積的閃爍時間（秒）：只在閃的時候往前走，停住後再開始不會突然跳一下
+    // 累積的閃爍時間（秒）：只在閃的時候往前走，暫停（省電模式、App 在背景）後再開始不會突然跳一下
     var t by remember { mutableFloatStateOf(0f) }
     val context = LocalContext.current
     LaunchedEffect(twinkle) {
         if (!twinkle) return@LaunchedEffect
         val power = context.getSystemService(PowerManager::class.java)
         while (true) {
-            val seen = UserActivity.lastTouch.value
-            if (SystemClock.uptimeMillis() < seen + TWINKLE_AFTER_TOUCH_MS && power?.isPowerSaveMode != true) {
-                var last = withFrameMillis { it }
-                while (SystemClock.uptimeMillis() < UserActivity.lastTouch.value + TWINKLE_AFTER_TOUCH_MS) {
-                    delay(TWINKLE_TICK_MS)
-                    // App 不在畫面上時 withFrameMillis 會自動暫停
-                    withFrameMillis { now ->
-                        t += (now - last).coerceIn(0L, 200L) / 1000f
-                        last = now
-                    }
+            // 省電模式不閃（每 2 秒看一次有沒有關掉）
+            if (power?.isPowerSaveMode == true) {
+                delay(2_000L)
+                continue
+            }
+            var last = withFrameMillis { it }
+            repeat(40) {
+                delay(TWINKLE_TICK_MS)
+                // App 不在畫面上時 withFrameMillis 會自動暫停
+                withFrameMillis { now ->
+                    t += (now - last).coerceIn(0L, 200L) / 1000f
+                    last = now
                 }
-            } else {
-                // 閒置（或省電模式）：停住、完全不畫，等下一次碰觸
-                UserActivity.lastTouch.first { it > seen }
             }
         }
     }

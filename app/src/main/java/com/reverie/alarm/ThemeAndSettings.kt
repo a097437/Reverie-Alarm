@@ -59,7 +59,7 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v2.6.0"
+const val APP_VERSION = "v2.6.5"
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
@@ -795,6 +795,13 @@ private fun SwatchGrid(
 data class ChangelogEntry(val version: String, val date: String, val highlights: List<String>)
 
 val APP_CHANGELOG get() = listOf(
+    ChangelogEntry(
+        "v2.6.5", "2026.11.24", listOf(
+            tr("App 開著時螢幕一直維持 120Hz，不再自動降頻"),
+            tr("修正過場動畫開頭頓一下、看起來像撕裂的問題"),
+            tr("背景星星恢復一直閃爍")
+        )
+    ),
     ChangelogEntry(
         "v2.6.0", "2026.11.24", listOf(
             tr("桌面小工具一次四種：2×2、4×2、兩週 5×2、整月 5×5，兩週和整月可以翻頁；過了午夜自動換到新的一天"),

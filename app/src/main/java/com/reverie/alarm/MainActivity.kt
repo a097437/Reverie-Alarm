@@ -392,7 +392,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        UserActivity.touched() // 回到 App 時星星閃一下（之後沒碰就停住，見 StarfieldBackground）
         requestHighRefreshRate()
     }
 
@@ -418,13 +417,6 @@ class MainActivity : ComponentActivity() {
             attrs.preferredDisplayModeId = want
             window.attributes = attrs
         }
-    }
-
-    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
-        // 只記按下與放開（不記每一個移動事件），讓背景星星知道使用者還在操作
-        val action = ev.actionMasked
-        if (action == android.view.MotionEvent.ACTION_DOWN || action == android.view.MotionEvent.ACTION_UP) UserActivity.touched()
-        return super.dispatchTouchEvent(ev)
     }
 
     override fun onDestroy() {
@@ -1214,6 +1206,8 @@ fun ReverieAlarmApp() {
         ) {
             // 背景：底色＋（可關閉的）隨機小星星；畫面本身透明，星星從卡片之間透出來
             Box(Modifier.fillMaxSize().background(currentTheme.bgBase)) {
+            // 螢幕一直維持 120Hz，不降頻（降頻後動畫開頭會頓一下，見 TimeTickers.kt）
+            KeepHighRefreshRate()
             if (appPrefs.backgroundStars) {
                 StarfieldBackground(
                     amount = appPrefs.starDensity,

@@ -709,6 +709,9 @@ object I18nEn {
         "「{0}」會立刻看不到你的班表。對方之後還是可以用目前的邀請碼重新訂閱；不想讓他再訂閱就更換邀請碼。" to "\"{0}\" will stop seeing your schedule right away. They can follow again with your current code; change the code to prevent that.",
         // ---------------- v2.5.0／v2.0.4／v2.0.3／v2.0.2／v2.0.1／v2.0.0 更新日誌 ----------------
         "國定假日：內建 2026–2027 官方行事曆，日曆標紅字；可選「照班表上班」或「見紅就休」，假日永遠不會自己改班表或關鬧鐘" to "Public holidays: the official 2026–2027 calendar in red on your calendar; choose \"Follow my roster\" or \"Off on holidays\". Holidays never change shifts or turn off alarms on their own",
+        "App 開著時螢幕一直維持 120Hz，不再自動降頻" to "The screen stays at 120Hz while the app is open and no longer drops its refresh rate",
+        "修正過場動畫開頭頓一下、看起來像撕裂的問題" to "Fixed transitions stuttering or looking torn at the start",
+        "背景星星恢復一直閃爍" to "Background stars twinkle continuously again",
         "桌面小工具一次四種：2×2、4×2、兩週 5×2、整月 5×5，兩週和整月可以翻頁；過了午夜自動換到新的一天" to "Four home screen widgets: 2×2, 4×2, two-week 5×2 and full-month 5×5 (the last two can page back and forth); they switch to the new day right after midnight",
         "主題色與日曆底色增加到 18 種與 12 種，自訂顏色改用色環調色盤；背景可以開啟會閃爍的小星星" to "18 accent colors and 12 calendar backgrounds, with a color wheel for custom colors; optional twinkling stars in the background",
         "鬧鐘可靠度檢查支援各品牌手機，依品牌直接打開背景執行設定並附教學" to "Alarm reliability check now covers every phone brand, opening each brand's background settings with a step-by-step guide",

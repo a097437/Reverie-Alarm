@@ -3,7 +3,7 @@
 手機用 USB 接上電腦、解鎖，App 停在要測的畫面，然後：
 
   python tools/perf/measure.py refresh       螢幕現在實際幾 Hz、系統有沒有限制更新率（例如過熱）
-  python tools/perf/measure.py idle          不碰手機 6 秒，App 畫了幾幀（正常應該接近 0）
+  python tools/perf/measure.py idle          不碰手機 6 秒，App 畫了幾幀、螢幕有沒有維持 120Hz
   python tools/perf/measure.py month         在月曆上左右滑 6 次（App 要停在「排班日曆」的月視圖）
   python tools/perf/measure.py tabs          在月曆下方的摘要卡左右滑，切換底部分頁 4 次
   python tools/perf/measure.py analyze 檔案   分析自己存下來的 `dumpsys gfxinfo <套件> framestats` 輸出
@@ -190,7 +190,12 @@ def cmd_idle():
     time.sleep(6)
     rows = parse_framestats(framestats())
     n = len(rows)
-    print(f"6 秒內 App 畫了 {n} 幀（{n / 6:.1f} 幀/秒）。" + ("✅ 閒置時沒有一直重畫" if n <= 6 else "⚠️ 沒碰手機時還在一直重畫（動畫或計時器沒停）"))
+    print(f"6 秒內 App 畫了 {n} 幀（{n / 6:.1f} 幀/秒）")
+    print("（正常約每秒 20 幀：背景星星閃爍約 17 幀，加上讓螢幕維持 120Hz 的心跳約 4 幀；遠超過這個數字代表有東西在不必要地重畫）")
+    m = re.search(r"renderRate=([\d.]+)", sh("dumpsys", "SurfaceFlinger"))
+    if m:
+        hz = float(m.group(1))
+        print(f"閒置時螢幕更新率：{hz:.0f}Hz" + ("（✅ 沒有降頻）" if hz >= 110 else "（⚠️ 降頻了：動畫開始時會頓一下）"))
 
 
 def swipes(y_frac, times, pause=1.0):
