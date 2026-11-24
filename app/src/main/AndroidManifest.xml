@@ -25,6 +25,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- 請使用者把 App 設為不限制電池用量 -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- App 內更新：下載好新版安裝檔後交給系統安裝程式（每次都會由使用者在系統畫面確認） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".ReverieApp"

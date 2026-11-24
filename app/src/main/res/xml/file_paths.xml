@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 拍班表照片：相機 App 把照片寫到 App 的暫存資料夾 -->
 <paths>
+    <!-- 拍班表照片：相機 App 把照片寫到 App 的暫存資料夾 -->
     <cache-path name="camera" path="camera/" />
+    <!-- App 內更新：下載好的新版安裝檔交給系統安裝程式 -->
+    <cache-path name="updates" path="updates/" />
 </paths>

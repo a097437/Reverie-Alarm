@@ -59,7 +59,8 @@ import androidx.compose.ui.window.DialogProperties
 //    色彩模式 × 背景基底風格 × 強調色 × 對比度 → 一組畫面顏色
 // ============================================================================
 
-const val APP_VERSION = "v2.6.5"
+/** 目前安裝的版本（例如 v2.7.0）：直接取自 build.gradle 的 versionName，發版時不用另外改 */
+const val APP_VERSION = "v" + BuildConfig.VERSION_NAME
 
 /** 全域文字縮放（設定頁的「舒適大字」），由 MainActivity 套用到整個 App */
 object UiScale {
